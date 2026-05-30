@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:acip;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+acip:
+  openai:
+    provider: OPENAI
+    api-key: test-key
+    require-api-key: true
+    chat-completions-url: http://localhost/openai/chat/completions

@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: acip
+      POSTGRES_USER: acip
+      POSTGRES_PASSWORD: acip
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acip -d acip"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mock-llm:
+    build:
+      context: ./mock-llm
+    ports:
+      - "8090:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/acip
+      DATABASE_USERNAME: acip
+      DATABASE_PASSWORD: acip
+      LLM_PROVIDER: MOCK_LLM
+      OPENAI_REQUIRE_API_KEY: "false"
+      OPENAI_API_KEY: ""
+      OPENAI_CHAT_COMPLETIONS_URL: http://mock-llm:8080/v1/chat/completions
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  app-ollama:
+    build:
+      context: .
+    profiles:
+      - ollama
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/acip
+      DATABASE_USERNAME: acip
+      DATABASE_PASSWORD: acip
+      LLM_PROVIDER: OLLAMA
+      OPENAI_REQUIRE_API_KEY: "false"
+      OPENAI_API_KEY: ""
+      OPENAI_CHAT_COMPLETIONS_URL: http://ollama:11434/v1/chat/completions
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  ollama-data:
