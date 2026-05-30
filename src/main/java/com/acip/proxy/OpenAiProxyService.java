@@ -1,5 +1,7 @@
 package com.acip.proxy;
 
+import com.acip.jira.Story;
+import com.acip.jira.StoryRepository;
 import com.acip.pricing.PricingService;
 import com.acip.usage.UsageEvent;
 import com.acip.usage.UsageEventRepository;
@@ -31,6 +33,7 @@ public class OpenAiProxyService {
     private final OpenAiUsageParser usageParser;
     private final PricingService pricingService;
     private final UsageEventRepository usageEventRepository;
+    private final StoryRepository storyRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -41,9 +44,10 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            StoryRepository storyRepository,
             ObjectMapper objectMapper
     ) {
-        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, objectMapper, Clock.systemUTC());
+        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, storyRepository, objectMapper, Clock.systemUTC());
     }
 
     OpenAiProxyService(
@@ -52,6 +56,7 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            StoryRepository storyRepository,
             ObjectMapper objectMapper,
             Clock clock
     ) {
@@ -60,6 +65,7 @@ public class OpenAiProxyService {
         this.usageParser = usageParser;
         this.pricingService = pricingService;
         this.usageEventRepository = usageEventRepository;
+        this.storyRepository = storyRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -83,13 +89,14 @@ public class OpenAiProxyService {
                 usage.promptTokens(),
                 usage.completionTokens()
         );
+        Story story = storyRepository.findByStoryKey(envelope.attribution().storyKey()).orElse(null);
 
         usageEventRepository.save(new UsageEvent(
                 UUID.randomUUID(),
                 openAiProperties.provider(),
                 model,
                 envelope.attribution().storyKey(),
-                null,
+                story == null ? null : story.epicKey(),
                 envelope.attribution().teamKey(),
                 envelope.attribution().userKey(),
                 usage.promptTokens(),
@@ -99,7 +106,7 @@ public class OpenAiProxyService {
                 latencyMs,
                 requestTimestamp,
                 "local",
-                "UNKNOWN",
+                story == null ? "UNKNOWN" : story.workType(),
                 upstreamResponse.statusCode().is2xxSuccessful() ? "SUCCEEDED" : "FAILED",
                 requestHash
         ));
