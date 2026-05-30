@@ -22,3 +22,11 @@ acip:
     chat-completions-url: ${OPENAI_CHAT_COMPLETIONS_URL:https://api.openai.com/v1/chat/completions}
     connect-timeout: 5s
     read-timeout: 60s
+  jira:
+    base-url: ${JIRA_BASE_URL:}
+    email: ${JIRA_EMAIL:}
+    api-token: ${JIRA_API_TOKEN:}
+    default-jql: ${JIRA_DEFAULT_JQL:project is not EMPTY ORDER BY updated DESC}
+    page-size: ${JIRA_PAGE_SIZE:50}
+    epic-link-field: ${JIRA_EPIC_LINK_FIELD:customfield_10014}
+    work-type-field: ${JIRA_WORK_TYPE_FIELD:customfield_10015}
