@@ -31,11 +31,11 @@ public class AttributionReportRepository {
         String sql = """
                 SELECT
                     COALESCE(SUM(estimated_cost_usd), 0) AS total_cost,
-                    COALESCE(SUM(CASE WHEN attribution_status = 'VALID' THEN estimated_cost_usd ELSE 0 END), 0) AS attributed_cost,
-                    COALESCE(SUM(CASE WHEN attribution_status <> 'VALID' THEN estimated_cost_usd ELSE 0 END), 0) AS unattributed_cost,
+                    COALESCE(SUM(CASE WHEN attribution_status IN ('VALID', 'MANUAL') THEN estimated_cost_usd ELSE 0 END), 0) AS attributed_cost,
+                    COALESCE(SUM(CASE WHEN attribution_status NOT IN ('VALID', 'MANUAL') THEN estimated_cost_usd ELSE 0 END), 0) AS unattributed_cost,
                     COUNT(*) AS event_count,
-                    COALESCE(SUM(CASE WHEN attribution_status = 'VALID' THEN 1 ELSE 0 END), 0) AS valid_event_count,
-                    COALESCE(SUM(CASE WHEN attribution_status <> 'VALID' THEN 1 ELSE 0 END), 0) AS invalid_event_count
+                    COALESCE(SUM(CASE WHEN attribution_status IN ('VALID', 'MANUAL') THEN 1 ELSE 0 END), 0) AS valid_event_count,
+                    COALESCE(SUM(CASE WHEN attribution_status NOT IN ('VALID', 'MANUAL') THEN 1 ELSE 0 END), 0) AS invalid_event_count
                 FROM ai_usage_events
                 """ + dateQuery.whereClause();
         return jdbcTemplate.queryForObject(sql, this::mapCoverage, dateQuery.args().toArray());
@@ -82,7 +82,7 @@ public class AttributionReportRepository {
     private QueryParts unattributedWhere(UnattributedSpendFilter filter) {
         List<String> conditions = new ArrayList<>();
         List<Object> args = new ArrayList<>();
-        conditions.add("attribution_status <> 'VALID'");
+        conditions.add("attribution_status NOT IN ('VALID', 'MANUAL')");
         if (filter.fromDate() != null) {
             conditions.add("request_timestamp >= ?");
             args.add(filter.fromDate());
