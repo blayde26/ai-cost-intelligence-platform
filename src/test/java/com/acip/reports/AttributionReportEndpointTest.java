@@ -52,15 +52,16 @@ class AttributionReportEndpointTest {
         for (int i = 0; i < 3; i++) {
             saveEvent("BAD-" + i, "payments", "brian", "5.00", 50, AttributionStatus.UNKNOWN_STORY, minutes(10 + i));
         }
+        saveEvent("PAY-1002", "payments", "brian", "7.00", 70, AttributionStatus.MANUAL, minutes(20));
 
         mockMvc.perform(get("/api/v1/reports/attribution-coverage"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalCost").value(65.00))
-                .andExpect(jsonPath("$.attributedCost").value(50.00))
+                .andExpect(jsonPath("$.totalCost").value(72.00))
+                .andExpect(jsonPath("$.attributedCost").value(57.00))
                 .andExpect(jsonPath("$.unattributedCost").value(15.00))
-                .andExpect(jsonPath("$.coveragePercent").value(76.92))
-                .andExpect(jsonPath("$.eventCount").value(8))
-                .andExpect(jsonPath("$.validEventCount").value(5))
+                .andExpect(jsonPath("$.coveragePercent").value(79.17))
+                .andExpect(jsonPath("$.eventCount").value(9))
+                .andExpect(jsonPath("$.validEventCount").value(6))
                 .andExpect(jsonPath("$.invalidEventCount").value(3));
     }
 
@@ -85,12 +86,13 @@ class AttributionReportEndpointTest {
     @Test
     void allocationAndPotentialWasteEndpointsExposeDashboardDtos() throws Exception {
         saveEvent("PAY-1001", "payments", "brian", "10.00", 100, AttributionStatus.VALID, minutes(1));
+        saveEvent("PAY-1002", "payments", "brian", "4.00", 40, AttributionStatus.MANUAL, minutes(1));
         saveEvent(null, "payments", "brian", "5.00", 50, AttributionStatus.MISSING_STORY_KEY, minutes(2));
 
         mockMvc.perform(get("/api/v1/reports/allocation"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalCost").value(15.00))
-                .andExpect(jsonPath("$.buckets[?(@.category == 'Revenue Features')].totalCost").value(10.00))
+                .andExpect(jsonPath("$.totalCost").value(19.00))
+                .andExpect(jsonPath("$.buckets[?(@.category == 'Revenue Features')].totalCost").value(14.00))
                 .andExpect(jsonPath("$.buckets[?(@.category == 'Unattributed')].totalCost").value(5.00));
 
         mockMvc.perform(get("/api/v1/reports/potential-waste"))
@@ -118,6 +120,7 @@ class AttributionReportEndpointTest {
     @Test
     void unattributedEndpointReturnsOnlyInvalidEventsAndSorts() throws Exception {
         saveEvent("PAY-1001", "payments", "brian", "99.00", 9999, AttributionStatus.VALID, minutes(1));
+        saveEvent("PAY-1002", "payments", "brian", "88.00", 8888, AttributionStatus.MANUAL, minutes(5));
         saveEvent("BAD-1", "payments", "brian", "1.00", 900, AttributionStatus.UNKNOWN_STORY, minutes(2));
         saveEvent(null, "platform", "alex", "3.00", 100, AttributionStatus.MISSING_STORY_KEY, minutes(3));
         saveEvent("BAD-2", "platform", "alex", "2.00", 500, AttributionStatus.UNKNOWN_STORY, minutes(4));
@@ -143,6 +146,7 @@ class AttributionReportEndpointTest {
         saveEvent(null, "payments", "alex", "3.00", 300, AttributionStatus.MISSING_STORY_KEY, minutes(2));
         saveEvent("BAD-2", "platform", "brian", "2.00", 200, AttributionStatus.UNKNOWN_STORY, minutes(3));
         saveEvent("PAY-1001", "payments", "brian", "10.00", 1000, AttributionStatus.VALID, minutes(4));
+        saveEvent("PAY-1002", "payments", "brian", "9.00", 900, AttributionStatus.MANUAL, minutes(4));
 
         UnattributedSpendFilter filter = new UnattributedSpendFilter(
                 minutes(0),
