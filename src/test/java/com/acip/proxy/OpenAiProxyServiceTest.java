@@ -1,8 +1,12 @@
 package com.acip.proxy;
 
 import com.acip.pricing.PricingService;
+import com.acip.usage.AttributionConfidence;
+import com.acip.usage.AttributionInferenceService;
+import com.acip.usage.AttributionSource;
 import com.acip.usage.AttributionStatus;
 import com.acip.usage.AttributionStatusService;
+import com.acip.usage.BranchStoryKeyParser;
 import com.acip.usage.UsageEvent;
 import com.acip.usage.UsageEventRepository;
 import com.acip.worktracking.WorkItem;
@@ -43,6 +47,7 @@ class OpenAiProxyServiceTest {
     private final PricingService pricingService = mock(PricingService.class);
     private final UsageEventRepository usageEventRepository = mock(UsageEventRepository.class);
     private final WorkTrackingProvider workTrackingProvider = mock(WorkTrackingProvider.class);
+    private final AttributionInferenceService attributionInferenceService = new AttributionInferenceService(new BranchStoryKeyParser());
     private final AttributionStatusService attributionStatusService = new AttributionStatusService(workTrackingProvider);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final OpenAiProxyService proxyService = new OpenAiProxyService(
@@ -52,6 +57,7 @@ class OpenAiProxyServiceTest {
             pricingService,
             usageEventRepository,
             workTrackingProvider,
+            attributionInferenceService,
             attributionStatusService,
             objectMapper,
             Clock.fixed(Instant.parse("2026-05-29T12:00:00Z"), ZoneOffset.UTC)
@@ -101,7 +107,49 @@ class OpenAiProxyServiceTest {
         assertThat(event.requestStatus()).isEqualTo("SUCCEEDED");
         assertThat(event.workType()).isEqualTo("CAPITALIZED");
         assertThat(event.attributionStatus()).isEqualTo(AttributionStatus.VALID);
+        assertThat(event.attributionSource()).isEqualTo(AttributionSource.EXPLICIT);
+        assertThat(event.attributionConfidence()).isEqualTo(AttributionConfidence.HIGH);
         assertThat(event.requestHash()).hasSize(64);
+    }
+
+    @Test
+    void infersStoryKeyFromBranchWhenStoryKeyIsMissing() throws Exception {
+        JsonNode request = objectMapper.readTree("""
+                {"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}
+                """);
+        OpenAiProxyEnvelope envelope = new OpenAiProxyEnvelope(
+                new ProxyAttribution(null, "payments", "brian", "ai-cost-intelligence-platform", "feature/pay-1001-checkout", "abc123"),
+                request
+        );
+        String responseBody = """
+                {"id":"chatcmpl_123","usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+                """;
+
+        when(gateway.postChatCompletions(request))
+                .thenReturn(new UpstreamResponse(HttpStatus.OK, responseBody, new HttpHeaders()));
+        when(usageParser.parse(responseBody)).thenReturn(new OpenAiTokenUsage(10, 5, 15));
+        when(pricingService.estimateCostUsd("MOCK_LLM", "gpt-4o-mini", 10, 5))
+                .thenReturn(new BigDecimal("0.00000450"));
+        when(workTrackingProvider.findStoryByKey("PAY-1001"))
+                .thenReturn(Optional.of(new WorkItem("PAY-1001", WorkItemType.STORY, "Checkout", "In Progress", "payments", "PAY-1000", "CAPITALIZED")));
+        when(workTrackingProvider.findEpicByKey("PAY-1000"))
+                .thenReturn(Optional.of(new WorkItem("PAY-1000", WorkItemType.EPIC, "Checkout modernization", "In Progress", "payments", null, "UNKNOWN")));
+
+        proxyService.proxyChatCompletions(envelope);
+
+        ArgumentCaptor<UsageEvent> eventCaptor = ArgumentCaptor.forClass(UsageEvent.class);
+        verify(usageEventRepository).save(eventCaptor.capture());
+        UsageEvent event = eventCaptor.getValue();
+        assertThat(event.storyKey()).isEqualTo("PAY-1001");
+        assertThat(event.epicKey()).isEqualTo("PAY-1000");
+        assertThat(event.repository()).isEqualTo("ai-cost-intelligence-platform");
+        assertThat(event.branch()).isEqualTo("feature/pay-1001-checkout");
+        assertThat(event.commitHash()).isEqualTo("abc123");
+        assertThat(event.attributionSource()).isEqualTo(AttributionSource.INFERRED_BRANCH);
+        assertThat(event.attributionConfidence()).isEqualTo(AttributionConfidence.HIGH);
+        assertThat(event.inferredStoryKey()).isEqualTo("PAY-1001");
+        assertThat(event.inferenceReason()).contains("branch");
+        assertThat(event.attributionStatus()).isEqualTo(AttributionStatus.VALID);
     }
 
     @Test
