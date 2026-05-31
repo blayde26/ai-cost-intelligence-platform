@@ -41,6 +41,14 @@ ACIP is an AI FinOps platform that attributes AI usage and estimated spend to en
 - Correction history table for auditability
 - Corrected events are surfaced as `MANUAL` attribution without blocking AI usage
 
+## Sprint 5 Scope
+
+- GitHub Actions CI for backend tests and frontend build
+- Architecture documentation and local demo walkthrough
+- Source metadata capture for repository, branch, and commit
+- Branch-name story key inference when explicit story attribution is missing
+- Attribution source visibility for explicit, inferred, manual, and missing attribution
+
 ## Quick Start
 
 Start the default local stack:
@@ -152,7 +160,10 @@ With the default Docker Compose stack, the full URL is `http://localhost:8080/ap
   "attribution": {
     "storyKey": "ACIP-123",
     "teamKey": "PLATFORM",
-    "userKey": "brian"
+    "userKey": "brian",
+    "repository": "ai-cost-intelligence-platform",
+    "branch": "feature/ACIP-123-cost-capture",
+    "commitHash": "abc123"
   },
   "request": {
     "model": "gpt-4o-mini",
@@ -167,6 +178,8 @@ With the default Docker Compose stack, the full URL is `http://localhost:8080/ap
 ```
 
 The OpenAI response body and status are returned to the caller. ACIP stores usage metadata, token counts, estimated cost, latency, attribution, and a SHA-256 request hash.
+
+If `storyKey` is missing, ACIP attempts to infer a Jira-style story key from `branch`, such as `feature/PAY-1001-checkout`. Inferred attribution is stored with source `INFERRED_BRANCH` and remains manually correctable.
 
 ### Usage Events
 
@@ -260,12 +273,12 @@ npm install
 npm run dev
 ```
 
-The Vite dev server runs at `http://localhost:5173` and proxies `/api` calls to `http://localhost:8080`.
+The Vite dev server runs at `http://localhost:5173` and proxies `/api` calls to `http://127.0.0.1:8080`.
 
 When testing the Ollama-backed API on port `8081`, point the dev proxy at that instance:
 
 ```powershell
-$env:VITE_API_PROXY_TARGET = "http://localhost:8081"
+$env:VITE_API_PROXY_TARGET = "http://127.0.0.1:8081"
 npm run dev
 ```
 
@@ -275,6 +288,11 @@ Build the frontend:
 cd frontend
 npm run build
 ```
+
+## Demo And Architecture
+
+- [Architecture](docs/architecture.md)
+- [Demo walkthrough](docs/demo-walkthrough.md)
 
 ## Local Verification
 

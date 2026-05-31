@@ -24,9 +24,10 @@ public class UsageEventRepository {
                     id, provider, model, story_key, epic_key, team_key, user_key,
                     prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                     latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                    attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                     repository, branch, commit_hash, initiative_key, initiative_name,
                     attribution_corrected, corrected_timestamp, corrected_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         jdbcTemplate.update(sql,
                 event.id(),
@@ -47,6 +48,10 @@ public class UsageEventRepository {
                 event.requestStatus(),
                 event.attributionStatus().name(),
                 event.requestHash(),
+                event.attributionSource().name(),
+                event.attributionConfidence().name(),
+                event.inferredStoryKey(),
+                event.inferenceReason(),
                 event.repository(),
                 event.branch(),
                 event.commitHash(),
@@ -63,6 +68,7 @@ public class UsageEventRepository {
                 SELECT id, provider, model, story_key, epic_key, team_key, user_key,
                        prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                        latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                        repository, branch, commit_hash, initiative_key, initiative_name,
                        attribution_corrected, corrected_timestamp, corrected_by
                 FROM ai_usage_events
@@ -77,6 +83,7 @@ public class UsageEventRepository {
                 SELECT id, provider, model, story_key, epic_key, team_key, user_key,
                        prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                        latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                        repository, branch, commit_hash, initiative_key, initiative_name,
                        attribution_corrected, corrected_timestamp, corrected_by
                 FROM ai_usage_events
@@ -121,6 +128,9 @@ public class UsageEventRepository {
                             team_key = ?,
                             work_type = ?,
                             attribution_status = ?,
+                            attribution_source = 'MANUAL',
+                            attribution_confidence = 'HIGH',
+                            inference_reason = ?,
                             attribution_corrected = TRUE,
                             corrected_timestamp = ?,
                             corrected_by = ?
@@ -131,6 +141,7 @@ public class UsageEventRepository {
                 correction.teamKey(),
                 correction.workType(),
                 correction.attributionStatus().name(),
+                "Manual correction by " + correction.correctedBy() + ".",
                 correction.correctedTimestamp(),
                 correction.correctedBy(),
                 originalEvent.id()
@@ -160,6 +171,10 @@ public class UsageEventRepository {
                 rs.getString("request_status"),
                 AttributionStatus.valueOf(rs.getString("attribution_status")),
                 rs.getString("request_hash"),
+                AttributionSource.valueOf(rs.getString("attribution_source")),
+                AttributionConfidence.valueOf(rs.getString("attribution_confidence")),
+                rs.getString("inferred_story_key"),
+                rs.getString("inference_reason"),
                 rs.getString("repository"),
                 rs.getString("branch"),
                 rs.getString("commit_hash"),
