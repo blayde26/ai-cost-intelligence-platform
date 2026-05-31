@@ -393,7 +393,7 @@ function StorySpendTable({ stories }: { stories: SpendByStory[] }) {
 }
 
 function AttributionHealthView({ coverage, events }: { coverage: AttributionCoverage; events: UsageEvent[] }) {
-  const invalidEvents = events.filter((event) => event.attributionStatus !== 'VALID');
+  const invalidEvents = events.filter((event) => !isAttributed(event));
   return (
     <Stack spacing={2.5}>
       <Box className="metric-grid">
@@ -575,6 +575,10 @@ function RequestDetail({
           <DetailRow label="Latency" value={`${integer(event.latencyMs)} ms`} />
           <DetailRow label="Work type" value={event.workType} />
           <DetailRow label="Request status" value={event.requestStatus} />
+          <DetailRow label="Attribution source" value={event.attributionSource.replace(/_/g, ' ')} />
+          <DetailRow label="Confidence" value={event.attributionConfidence} />
+          <DetailRow label="Inferred story" value={event.inferredStoryKey ?? 'None'} />
+          <DetailRow label="Inference reason" value={event.inferenceReason ?? 'None'} />
           <DetailRow label="Repository" value={event.repository ?? 'Unassigned'} />
           <DetailRow label="Branch" value={event.branch ?? 'Unassigned'} />
           <DetailRow label="Initiative" value={event.initiativeKey ?? 'Unassigned'} />
@@ -709,6 +713,10 @@ function CorrectionForm({
 function StatusChip({ value }: { value: string }) {
   const color = value === 'VALID' ? 'success' : value === 'MANUAL' ? 'info' : 'warning';
   return <Chip size="small" label={value.replace(/_/g, ' ')} color={color} variant="outlined" />;
+}
+
+function isAttributed(event: UsageEvent) {
+  return event.attributionStatus === 'VALID' || event.attributionStatus === 'MANUAL';
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
