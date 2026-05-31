@@ -1,5 +1,9 @@
 package com.acip.usage;
 
+import com.acip.capture.UsageCaptureConfidence;
+import com.acip.capture.UsageCaptureMethod;
+import com.acip.capture.UsageCaptureSource;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -23,6 +27,10 @@ public record UsageEvent(
         String requestStatus,
         AttributionStatus attributionStatus,
         String requestHash,
+        UsageCaptureSource captureSource,
+        String captureProvider,
+        UsageCaptureMethod captureMethod,
+        UsageCaptureConfidence captureConfidence,
         AttributionSource attributionSource,
         AttributionConfidence attributionConfidence,
         String inferredStoryKey,
@@ -75,6 +83,10 @@ public record UsageEvent(
                 requestStatus,
                 attributionStatus,
                 requestHash,
+                UsageCaptureSource.PROXY,
+                "OPENAI_COMPATIBLE_PROXY",
+                UsageCaptureMethod.REAL_TIME_PROXY,
+                UsageCaptureConfidence.HIGH,
                 storyKey == null || storyKey.isBlank() ? AttributionSource.MISSING : AttributionSource.EXPLICIT,
                 storyKey == null || storyKey.isBlank() ? AttributionConfidence.LOW : AttributionConfidence.HIGH,
                 null,
@@ -137,6 +149,10 @@ public record UsageEvent(
                 requestStatus,
                 attributionStatus,
                 requestHash,
+                UsageCaptureSource.PROXY,
+                "OPENAI_COMPATIBLE_PROXY",
+                UsageCaptureMethod.REAL_TIME_PROXY,
+                UsageCaptureConfidence.HIGH,
                 attributionCorrected ? AttributionSource.MANUAL : storyKey == null || storyKey.isBlank() ? AttributionSource.MISSING : AttributionSource.EXPLICIT,
                 attributionCorrected ? AttributionConfidence.HIGH : storyKey == null || storyKey.isBlank() ? AttributionConfidence.LOW : AttributionConfidence.HIGH,
                 null,

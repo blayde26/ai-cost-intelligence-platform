@@ -1,5 +1,9 @@
 package com.acip.proxy;
 
+import com.acip.capture.ProxyCaptureProvider;
+import com.acip.capture.UsageCaptureConfidence;
+import com.acip.capture.UsageCaptureMethod;
+import com.acip.capture.UsageCaptureSource;
 import com.acip.pricing.PricingService;
 import com.acip.usage.AttributionConfidence;
 import com.acip.usage.AttributionInferenceService;
@@ -46,6 +50,7 @@ class OpenAiProxyServiceTest {
     private final OpenAiUsageParser usageParser = mock(OpenAiUsageParser.class);
     private final PricingService pricingService = mock(PricingService.class);
     private final UsageEventRepository usageEventRepository = mock(UsageEventRepository.class);
+    private final ProxyCaptureProvider proxyCaptureProvider = new ProxyCaptureProvider();
     private final WorkTrackingProvider workTrackingProvider = mock(WorkTrackingProvider.class);
     private final AttributionInferenceService attributionInferenceService = new AttributionInferenceService(new BranchStoryKeyParser());
     private final AttributionStatusService attributionStatusService = new AttributionStatusService(workTrackingProvider);
@@ -56,6 +61,7 @@ class OpenAiProxyServiceTest {
             usageParser,
             pricingService,
             usageEventRepository,
+            proxyCaptureProvider,
             workTrackingProvider,
             attributionInferenceService,
             attributionStatusService,
@@ -106,6 +112,10 @@ class OpenAiProxyServiceTest {
         assertThat(event.estimatedCostUsd()).isEqualByComparingTo("0.00000450");
         assertThat(event.requestStatus()).isEqualTo("SUCCEEDED");
         assertThat(event.workType()).isEqualTo("CAPITALIZED");
+        assertThat(event.captureSource()).isEqualTo(UsageCaptureSource.PROXY);
+        assertThat(event.captureProvider()).isEqualTo("OPENAI_COMPATIBLE_PROXY");
+        assertThat(event.captureMethod()).isEqualTo(UsageCaptureMethod.REAL_TIME_PROXY);
+        assertThat(event.captureConfidence()).isEqualTo(UsageCaptureConfidence.HIGH);
         assertThat(event.attributionStatus()).isEqualTo(AttributionStatus.VALID);
         assertThat(event.attributionSource()).isEqualTo(AttributionSource.EXPLICIT);
         assertThat(event.attributionConfidence()).isEqualTo(AttributionConfidence.HIGH);

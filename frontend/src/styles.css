@@ -118,6 +118,13 @@ body {
   padding: 12px 14px;
 }
 
+.health-row {
+  border: 1px solid #e0e4ea;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
 .bar-track {
   height: 8px;
   border-radius: 999px;

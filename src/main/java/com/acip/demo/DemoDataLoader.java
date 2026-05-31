@@ -1,5 +1,8 @@
 package com.acip.demo;
 
+import com.acip.capture.UsageCaptureConfidence;
+import com.acip.capture.UsageCaptureMethod;
+import com.acip.capture.UsageCaptureSource;
 import com.acip.usage.AttributionStatus;
 import com.acip.worktracking.WorkItem;
 import com.acip.worktracking.WorkTrackingProvider;
@@ -178,8 +181,9 @@ public class DemoDataLoader implements CommandLineRunner {
                             id, provider, model, story_key, epic_key, team_key, user_key,
                             prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                             latency_ms, request_timestamp, environment, work_type, request_status,
-                            attribution_status, request_hash, attribution_source, attribution_confidence, inference_reason
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            attribution_status, request_hash, capture_source, capture_provider, capture_method,
+                            capture_confidence, attribution_source, attribution_confidence, inference_reason
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 "OLLAMA",
@@ -199,6 +203,10 @@ public class DemoDataLoader implements CommandLineRunner {
                 "SUCCEEDED",
                 attributionStatus.name(),
                 requestHash(storyKey, timestamp),
+                UsageCaptureSource.DEMO_DATA.name(),
+                "DEMO_DATA_LOADER",
+                UsageCaptureMethod.SEEDED_DEMO.name(),
+                UsageCaptureConfidence.HIGH.name(),
                 storyKey == null ? "MISSING" : "EXPLICIT",
                 storyKey == null ? "LOW" : "HIGH",
                 storyKey == null ? "Demo event intentionally omits a story key." : "Demo event includes an explicit story key."

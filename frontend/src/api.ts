@@ -85,6 +85,10 @@ export type UsageEvent = {
   requestStatus: string;
   attributionStatus: string;
   requestHash: string;
+  captureSource: string;
+  captureProvider: string;
+  captureMethod: string;
+  captureConfidence: string;
   attributionSource: string;
   attributionConfidence: string;
   inferredStoryKey: string | null;
@@ -97,6 +101,31 @@ export type UsageEvent = {
   attributionCorrected: boolean;
   correctedTimestamp: string | null;
   correctedBy: string | null;
+};
+
+export type SetupHealthStatus = 'READY' | 'WARNING' | 'NOT_CONFIGURED' | 'ERROR';
+
+export type SetupHealthComponent = {
+  key: string;
+  label: string;
+  status: SetupHealthStatus;
+  message: string;
+};
+
+export type SetupHealthReport = {
+  overallStatus: SetupHealthStatus;
+  components: SetupHealthComponent[];
+};
+
+export type UsageImportError = {
+  rowNumber: number;
+  message: string;
+};
+
+export type UsageImportResult = {
+  importedCount: number;
+  skippedCount: number;
+  errors: UsageImportError[];
 };
 
 export type AttributionCorrectionRequest = {
@@ -132,6 +161,20 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function postText<T>(path: string, body: string, contentType: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': contentType
+    },
+    body
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export const api = {
   overview: () => getJson<SpendOverview>('/api/v1/reports/overview'),
   coverage: () => getJson<AttributionCoverage>('/api/v1/reports/attribution-coverage'),
@@ -140,6 +183,8 @@ export const api = {
   spendByStory: () => getJson<SpendByStory[]>('/api/v1/reports/spend/by-story'),
   spendByEpic: () => getJson<SpendByEpic[]>('/api/v1/reports/spend/by-epic'),
   spendByTeam: () => getJson<SpendByTeam[]>('/api/v1/reports/spend/by-team'),
+  setupHealth: () => getJson<SetupHealthReport>('/api/v1/setup/health'),
+  importUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv', csv, 'text/csv'),
   usageEvents: () => getJson<UsageEvent[]>('/api/v1/usage/events?limit=100'),
   usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`),
   correctAttribution: (id: string, request: AttributionCorrectionRequest) =>

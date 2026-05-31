@@ -41,6 +41,23 @@ ACIP is an AI FinOps platform that attributes AI usage and estimated spend to en
 - Correction history table for auditability
 - Corrected events are surfaced as `MANUAL` attribution without blocking AI usage
 
+## Usage Capture Expansion
+
+- Usage capture is modeled separately from usage attribution.
+- Proxy traffic is recorded through a `UsageCaptureProvider` path with source `PROXY`.
+- Manual CSV imports are supported for evaluating ACIP without rerouting AI traffic.
+- Imported usage is normalized into the same `AIUsageEvent` model used by reports and attribution correction.
+
+## Strategic Expansion Direction
+
+ACIP is expanding from AI cost attribution toward AI investment intelligence. The roadmap now separates three platform layers:
+
+- Usage capture: proxy, CSV import, OpenAI usage import, Claude Code analytics, GitHub Copilot usage, and other provider imports.
+- Attribution: Jira, manual correction, branch inference, future PR/repository/user-pattern inference.
+- Outcome analytics: Jira outcomes, GitHub outcomes, team snapshots, repository metrics, and correlation dashboards.
+
+Near-term work prioritizes low-friction adoption: setup health, CSV import, and import-first evaluation workflows before deeper outcome analytics.
+
 ## Sprint 5 Scope
 
 - GitHub Actions CI for backend tests and frontend build
@@ -207,6 +224,58 @@ Manually assigns or corrects a usage event after capture. At least one of `story
 ```
 
 The response is the updated usage event with `attributionStatus` set to `MANUAL`, `attributionCorrected` set to `true`, and correction metadata populated.
+
+### CSV Usage Import
+
+`POST /api/v1/usage/imports/csv`
+
+Accepts raw `text/csv` and imports rows into canonical usage events. Required headers:
+
+- `provider`
+- `model`
+- `userKey`
+- `requestTimestamp`
+
+`teamKey` is required unless the row can be resolved to a known story. Optional headers include:
+
+- `storyKey`
+- `epicKey`
+- `teamKey`
+- `promptTokens`
+- `completionTokens`
+- `totalTokens`
+- `estimatedCostUsd`
+- `environment`
+- `workType`
+- `requestStatus`
+- `repository`
+- `branch`
+- `commitHash`
+- `initiativeKey`
+- `initiativeName`
+
+Example:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:8080/api/v1/usage/imports/csv `
+  -ContentType 'text/csv' `
+  -Body @'
+provider,model,teamKey,userKey,totalTokens,estimatedCostUsd,requestTimestamp,branch
+OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-1002-payment-retry
+'@
+```
+
+The import response includes `importedCount`, `skippedCount`, and row-level errors. Import failures do not block valid rows.
+
+### Setup Health
+
+`GET /api/v1/setup/health`
+
+Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, and planned outcome analytics.
+
+The dashboard **Setup** tab uses this endpoint and includes a CSV import panel for pilot users.
 
 ### Jira Sync
 

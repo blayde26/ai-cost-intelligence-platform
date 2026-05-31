@@ -1,5 +1,8 @@
 package com.acip.usage;
 
+import com.acip.capture.UsageCaptureConfidence;
+import com.acip.capture.UsageCaptureMethod;
+import com.acip.capture.UsageCaptureSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -24,10 +27,11 @@ public class UsageEventRepository {
                     id, provider, model, story_key, epic_key, team_key, user_key,
                     prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                     latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                    capture_source, capture_provider, capture_method, capture_confidence,
                     attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                     repository, branch, commit_hash, initiative_key, initiative_name,
                     attribution_corrected, corrected_timestamp, corrected_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         jdbcTemplate.update(sql,
                 event.id(),
@@ -48,6 +52,10 @@ public class UsageEventRepository {
                 event.requestStatus(),
                 event.attributionStatus().name(),
                 event.requestHash(),
+                event.captureSource().name(),
+                event.captureProvider(),
+                event.captureMethod().name(),
+                event.captureConfidence().name(),
                 event.attributionSource().name(),
                 event.attributionConfidence().name(),
                 event.inferredStoryKey(),
@@ -68,6 +76,7 @@ public class UsageEventRepository {
                 SELECT id, provider, model, story_key, epic_key, team_key, user_key,
                        prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                        latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       capture_source, capture_provider, capture_method, capture_confidence,
                        attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                        repository, branch, commit_hash, initiative_key, initiative_name,
                        attribution_corrected, corrected_timestamp, corrected_by
@@ -83,6 +92,7 @@ public class UsageEventRepository {
                 SELECT id, provider, model, story_key, epic_key, team_key, user_key,
                        prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                        latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       capture_source, capture_provider, capture_method, capture_confidence,
                        attribution_source, attribution_confidence, inferred_story_key, inference_reason,
                        repository, branch, commit_hash, initiative_key, initiative_name,
                        attribution_corrected, corrected_timestamp, corrected_by
@@ -171,6 +181,10 @@ public class UsageEventRepository {
                 rs.getString("request_status"),
                 AttributionStatus.valueOf(rs.getString("attribution_status")),
                 rs.getString("request_hash"),
+                UsageCaptureSource.valueOf(rs.getString("capture_source")),
+                rs.getString("capture_provider"),
+                UsageCaptureMethod.valueOf(rs.getString("capture_method")),
+                UsageCaptureConfidence.valueOf(rs.getString("capture_confidence")),
                 AttributionSource.valueOf(rs.getString("attribution_source")),
                 AttributionConfidence.valueOf(rs.getString("attribution_confidence")),
                 rs.getString("inferred_story_key"),

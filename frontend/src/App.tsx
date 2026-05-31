@@ -32,23 +32,27 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PieChartIcon from '@mui/icons-material/PieChart';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SettingsIcon from '@mui/icons-material/Settings';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AttributionCorrectionRequest,
   AttributionCoverage,
   PotentialWaste,
+  SetupHealthReport,
   SpendAllocation,
   SpendByEpic,
   SpendByStory,
   SpendByTeam,
   SpendOverview,
   UsageEvent,
+  UsageImportResult,
   api
 } from './api';
 import { compactNumber, integer, money, percent, timestamp } from './format';
 
-type View = 'overview' | 'teams' | 'epics' | 'attribution' | 'waste' | 'usage';
+type View = 'overview' | 'teams' | 'epics' | 'attribution' | 'waste' | 'usage' | 'setup';
 
 type DashboardData = {
   overview: SpendOverview;
@@ -59,6 +63,7 @@ type DashboardData = {
   epics: SpendByEpic[];
   teams: SpendByTeam[];
   events: UsageEvent[];
+  setupHealth: SetupHealthReport;
 };
 
 const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
@@ -67,7 +72,8 @@ const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
   { value: 'epics', label: 'Epic Analysis', icon: <AccountTreeIcon fontSize="small" /> },
   { value: 'attribution', label: 'Attribution Health', icon: <HealthAndSafetyIcon fontSize="small" /> },
   { value: 'waste', label: 'Potential Waste', icon: <WarningAmberIcon fontSize="small" /> },
-  { value: 'usage', label: 'Usage Explorer', icon: <ListAltIcon fontSize="small" /> }
+  { value: 'usage', label: 'Usage Explorer', icon: <ListAltIcon fontSize="small" /> },
+  { value: 'setup', label: 'Setup', icon: <SettingsIcon fontSize="small" /> }
 ];
 
 function routeFromHash(): { view: View; eventId?: string } {
@@ -122,7 +128,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const [overview, coverage, allocation, waste, stories, epics, teams, events] = await Promise.all([
+      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth] = await Promise.all([
         api.overview(),
         api.coverage(),
         api.allocation(),
@@ -130,9 +136,10 @@ export default function App() {
         api.spendByStory(),
         api.spendByEpic(),
         api.spendByTeam(),
-        api.usageEvents()
+        api.usageEvents(),
+        api.setupHealth()
       ]);
-      setData({ overview, coverage, allocation, waste, stories, epics, teams, events });
+      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to load dashboard data');
     } finally {
@@ -207,6 +214,9 @@ export default function App() {
                 stories={data.stories}
                 onCorrected={(event) => void handleAttributionCorrected(event)}
               />
+            )}
+            {route.view === 'setup' && (
+              <SetupView health={data.setupHealth} onImported={() => void loadDashboard()} />
             )}
           </>
         )}
@@ -506,6 +516,113 @@ function UsageEventTable({ events }: { events: UsageEvent[] }) {
   );
 }
 
+function SetupView({ health, onImported }: { health: SetupHealthReport; onImported: () => void }) {
+  return (
+    <Stack spacing={2.5}>
+      <Box className="metric-grid">
+        <MetricCard label="Overall setup" value={health.overallStatus.replace(/_/g, ' ')} />
+        <MetricCard label="Ready checks" value={integer(health.components.filter((item) => item.status === 'READY').length)} detail={`${integer(health.components.length)} total checks`} />
+        <MetricCard label="Warnings" value={integer(health.components.filter((item) => item.status === 'WARNING').length)} />
+        <MetricCard label="Not configured" value={integer(health.components.filter((item) => item.status === 'NOT_CONFIGURED').length)} />
+      </Box>
+      <Box className="two-column">
+        <ReportPanel title="Integration Health">
+          <Stack spacing={1.25}>
+            {health.components.map((component) => (
+              <Box key={component.key} className="health-row">
+                <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
+                  <Typography fontWeight={750}>{component.label}</Typography>
+                  <StatusChip value={component.status} />
+                </Stack>
+                <Typography variant="body2" color="text.secondary">{component.message}</Typography>
+              </Box>
+            ))}
+          </Stack>
+        </ReportPanel>
+        <CsvImportPanel onImported={onImported} />
+      </Box>
+    </Stack>
+  );
+}
+
+function CsvImportPanel({ onImported }: { onImported: () => void }) {
+  const sampleCsv = `provider,model,teamKey,userKey,totalTokens,estimatedCostUsd,requestTimestamp,branch
+OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-1002-payment-retry`;
+  const [csv, setCsv] = useState(sampleCsv);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<UsageImportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submitImport() {
+    setImporting(true);
+    setResult(null);
+    setError(null);
+    try {
+      const importResult = await api.importUsageCsv(csv);
+      setResult(importResult);
+      onImported();
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Unable to import CSV');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function loadFile(file: File | null) {
+    if (!file) {
+      return;
+    }
+    setCsv(await file.text());
+    setResult(null);
+    setError(null);
+  }
+
+  return (
+    <Paper className="panel">
+      <Stack spacing={1.5}>
+        <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
+          <Typography variant="h2">CSV Usage Import</Typography>
+          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
+            Choose CSV
+            <input
+              hidden
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(input) => void loadFile(input.target.files?.[0] ?? null)}
+            />
+          </Button>
+        </Stack>
+        <TextField
+          label="CSV payload"
+          value={csv}
+          onChange={(input) => setCsv(input.target.value)}
+          multiline
+          minRows={8}
+          size="small"
+        />
+        <Button variant="contained" onClick={() => void submitImport()} disabled={importing || csv.trim().length === 0}>
+          {importing ? 'Importing usage' : 'Import usage'}
+        </Button>
+        {error && <Alert severity="error">{error}</Alert>}
+        {result && (
+          <Alert severity={result.skippedCount > 0 ? 'warning' : 'success'}>
+            Imported {integer(result.importedCount)} rows. Skipped {integer(result.skippedCount)} rows.
+          </Alert>
+        )}
+        {result && result.errors.length > 0 && (
+          <Stack spacing={0.75}>
+            {result.errors.slice(0, 5).map((item) => (
+              <Typography key={`${item.rowNumber}-${item.message}`} variant="body2" color="text.secondary">
+                Row {item.rowNumber}: {item.message}
+              </Typography>
+            ))}
+          </Stack>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
 function MetricCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <Paper className="metric-card">
@@ -575,6 +692,10 @@ function RequestDetail({
           <DetailRow label="Latency" value={`${integer(event.latencyMs)} ms`} />
           <DetailRow label="Work type" value={event.workType} />
           <DetailRow label="Request status" value={event.requestStatus} />
+          <DetailRow label="Capture source" value={event.captureSource.replace(/_/g, ' ')} />
+          <DetailRow label="Capture provider" value={event.captureProvider.replace(/_/g, ' ')} />
+          <DetailRow label="Capture method" value={event.captureMethod.replace(/_/g, ' ')} />
+          <DetailRow label="Capture confidence" value={event.captureConfidence} />
           <DetailRow label="Attribution source" value={event.attributionSource.replace(/_/g, ' ')} />
           <DetailRow label="Confidence" value={event.attributionConfidence} />
           <DetailRow label="Inferred story" value={event.inferredStoryKey ?? 'None'} />
@@ -711,7 +832,7 @@ function CorrectionForm({
 }
 
 function StatusChip({ value }: { value: string }) {
-  const color = value === 'VALID' ? 'success' : value === 'MANUAL' ? 'info' : 'warning';
+  const color = value === 'VALID' || value === 'READY' ? 'success' : value === 'MANUAL' ? 'info' : value === 'ERROR' ? 'error' : 'warning';
   return <Chip size="small" label={value.replace(/_/g, ' ')} color={color} variant="outlined" />;
 }
 

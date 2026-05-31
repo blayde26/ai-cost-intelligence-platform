@@ -1,5 +1,7 @@
 package com.acip.proxy;
 
+import com.acip.capture.ProxyCaptureProvider;
+import com.acip.capture.UsageCaptureMetadata;
 import com.acip.pricing.PricingService;
 import com.acip.usage.AttributionInference;
 import com.acip.usage.AttributionInferenceService;
@@ -39,6 +41,7 @@ public class OpenAiProxyService {
     private final OpenAiUsageParser usageParser;
     private final PricingService pricingService;
     private final UsageEventRepository usageEventRepository;
+    private final ProxyCaptureProvider proxyCaptureProvider;
     private final WorkTrackingProvider workTrackingProvider;
     private final AttributionInferenceService attributionInferenceService;
     private final AttributionStatusService attributionStatusService;
@@ -52,12 +55,13 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            ProxyCaptureProvider proxyCaptureProvider,
             WorkTrackingProvider workTrackingProvider,
             AttributionInferenceService attributionInferenceService,
             AttributionStatusService attributionStatusService,
             ObjectMapper objectMapper
     ) {
-        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, workTrackingProvider, attributionInferenceService, attributionStatusService, objectMapper, Clock.systemUTC());
+        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, proxyCaptureProvider, workTrackingProvider, attributionInferenceService, attributionStatusService, objectMapper, Clock.systemUTC());
     }
 
     OpenAiProxyService(
@@ -66,6 +70,7 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            ProxyCaptureProvider proxyCaptureProvider,
             WorkTrackingProvider workTrackingProvider,
             AttributionInferenceService attributionInferenceService,
             AttributionStatusService attributionStatusService,
@@ -77,6 +82,7 @@ public class OpenAiProxyService {
         this.usageParser = usageParser;
         this.pricingService = pricingService;
         this.usageEventRepository = usageEventRepository;
+        this.proxyCaptureProvider = proxyCaptureProvider;
         this.workTrackingProvider = workTrackingProvider;
         this.attributionInferenceService = attributionInferenceService;
         this.attributionStatusService = attributionStatusService;
@@ -107,6 +113,7 @@ public class OpenAiProxyService {
         AttributionInference inference = attributionInferenceService.infer(attribution.storyKey(), attribution.branch());
         WorkItem story = findStory(inference.storyKey()).orElse(null);
         AttributionStatus attributionStatus = attributionStatusService.classify(inference.storyKey());
+        UsageCaptureMetadata captureMetadata = proxyCaptureProvider.metadata();
 
         usageEventRepository.save(new UsageEvent(
                 UUID.randomUUID(),
@@ -127,6 +134,10 @@ public class OpenAiProxyService {
                 upstreamResponse.statusCode().is2xxSuccessful() ? "SUCCEEDED" : "FAILED",
                 attributionStatus,
                 requestHash,
+                captureMetadata.source(),
+                captureMetadata.provider(),
+                captureMetadata.method(),
+                captureMetadata.confidence(),
                 inference.source(),
                 inference.confidence(),
                 inference.source() == AttributionSource.INFERRED_BRANCH ? inference.storyKey() : null,
