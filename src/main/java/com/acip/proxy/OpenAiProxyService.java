@@ -1,8 +1,12 @@
 package com.acip.proxy;
 
 import com.acip.pricing.PricingService;
+import com.acip.usage.AttributionStatus;
+import com.acip.usage.AttributionStatusService;
 import com.acip.usage.UsageEvent;
 import com.acip.usage.UsageEventRepository;
+import com.acip.worktracking.WorkItem;
+import com.acip.worktracking.WorkTrackingProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
@@ -31,6 +36,8 @@ public class OpenAiProxyService {
     private final OpenAiUsageParser usageParser;
     private final PricingService pricingService;
     private final UsageEventRepository usageEventRepository;
+    private final WorkTrackingProvider workTrackingProvider;
+    private final AttributionStatusService attributionStatusService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -41,9 +48,11 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            WorkTrackingProvider workTrackingProvider,
+            AttributionStatusService attributionStatusService,
             ObjectMapper objectMapper
     ) {
-        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, objectMapper, Clock.systemUTC());
+        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, workTrackingProvider, attributionStatusService, objectMapper, Clock.systemUTC());
     }
 
     OpenAiProxyService(
@@ -52,6 +61,8 @@ public class OpenAiProxyService {
             OpenAiUsageParser usageParser,
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
+            WorkTrackingProvider workTrackingProvider,
+            AttributionStatusService attributionStatusService,
             ObjectMapper objectMapper,
             Clock clock
     ) {
@@ -60,6 +71,8 @@ public class OpenAiProxyService {
         this.usageParser = usageParser;
         this.pricingService = pricingService;
         this.usageEventRepository = usageEventRepository;
+        this.workTrackingProvider = workTrackingProvider;
+        this.attributionStatusService = attributionStatusService;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -83,13 +96,15 @@ public class OpenAiProxyService {
                 usage.promptTokens(),
                 usage.completionTokens()
         );
+        WorkItem story = findStory(envelope.attribution().storyKey()).orElse(null);
+        AttributionStatus attributionStatus = attributionStatusService.classify(envelope.attribution().storyKey());
 
         usageEventRepository.save(new UsageEvent(
                 UUID.randomUUID(),
                 openAiProperties.provider(),
                 model,
                 envelope.attribution().storyKey(),
-                null,
+                story == null ? null : story.epicKey(),
                 envelope.attribution().teamKey(),
                 envelope.attribution().userKey(),
                 usage.promptTokens(),
@@ -99,8 +114,9 @@ public class OpenAiProxyService {
                 latencyMs,
                 requestTimestamp,
                 "local",
-                "UNKNOWN",
+                story == null ? "UNKNOWN" : story.workType(),
                 upstreamResponse.statusCode().is2xxSuccessful() ? "SUCCEEDED" : "FAILED",
+                attributionStatus,
                 requestHash
         ));
 
@@ -125,6 +141,14 @@ public class OpenAiProxyService {
             return HexFormat.of().formatHex(digest.digest(canonicalRequest));
         } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
             throw new IllegalStateException("Unable to hash OpenAI request.", exception);
+        }
+    }
+
+    private Optional<WorkItem> findStory(String storyKey) {
+        try {
+            return workTrackingProvider.findStoryByKey(storyKey);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
         }
     }
 

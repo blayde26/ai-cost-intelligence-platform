@@ -4,5 +4,10 @@ target/
 *.iml
 *.log
 .env
+.env.*
+!.env.example
+node_modules/
+dist/
+*.tsbuildinfo
 __pycache__/
 *.pyc
