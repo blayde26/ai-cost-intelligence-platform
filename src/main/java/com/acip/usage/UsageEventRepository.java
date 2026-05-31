@@ -87,6 +87,59 @@ public class UsageEventRepository {
                 .findFirst();
     }
 
+    public void applyCorrection(UsageEvent originalEvent, AttributionCorrection correction) {
+        jdbcTemplate.update("""
+                        INSERT INTO usage_event_attribution_corrections (
+                            id, usage_event_id,
+                            original_story_key, original_epic_key, original_team_key,
+                            original_work_type, original_attribution_status,
+                            corrected_story_key, corrected_epic_key, corrected_team_key,
+                            corrected_work_type, corrected_attribution_status,
+                            corrected_by, corrected_timestamp, note
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                UUID.randomUUID(),
+                originalEvent.id(),
+                originalEvent.storyKey(),
+                originalEvent.epicKey(),
+                originalEvent.teamKey(),
+                originalEvent.workType(),
+                originalEvent.attributionStatus().name(),
+                correction.storyKey(),
+                correction.epicKey(),
+                correction.teamKey(),
+                correction.workType(),
+                correction.attributionStatus().name(),
+                correction.correctedBy(),
+                correction.correctedTimestamp(),
+                correction.note()
+        );
+        int updated = jdbcTemplate.update("""
+                        UPDATE ai_usage_events
+                        SET story_key = ?,
+                            epic_key = ?,
+                            team_key = ?,
+                            work_type = ?,
+                            attribution_status = ?,
+                            attribution_corrected = TRUE,
+                            corrected_timestamp = ?,
+                            corrected_by = ?
+                        WHERE id = ?
+                        """,
+                correction.storyKey(),
+                correction.epicKey(),
+                correction.teamKey(),
+                correction.workType(),
+                correction.attributionStatus().name(),
+                correction.correctedTimestamp(),
+                correction.correctedBy(),
+                originalEvent.id()
+        );
+        if (updated != 1) {
+            throw new IllegalStateException("Expected to update exactly one usage event.");
+        }
+    }
+
     private UsageEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
         return new UsageEvent(
                 rs.getObject("id", java.util.UUID.class),
