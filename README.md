@@ -13,6 +13,27 @@ ACIP is an AI FinOps platform that attributes AI usage and estimated spend to en
 - AI usage event persistence
 - Basic usage history API
 
+## Sprint 2 Scope
+
+- Work tracking provider abstraction with Mock Jira for local development and Jira Cloud for configured environments
+- Story and epic sync into ACIP reporting tables
+- Spend reporting by story and epic
+- Attribution status on every usage event
+- Cost-based attribution coverage report
+- Unattributed spend list and summary APIs
+- Realistic local demo data for teams, epics, stories, and 2,000+ usage events
+
+## Sprint 3 Scope
+
+- React and TypeScript dashboard
+- Material UI operational interface
+- Allocation-first overview for revenue features, operations, research, unattributed spend, and potential waste
+- Stable reporting DTOs for story, epic, team, coverage, allocation, and waste reports
+- Date-window support for reporting APIs through `startDate` and `endDate`
+- Spend tables by story, epic, and team
+- Attribution health and potential waste dashboard pages
+- Recent request list and request detail inspection
+
 ## Quick Start
 
 Start the default local stack:
@@ -24,6 +45,7 @@ docker compose up --build
 This starts:
 
 - ACIP API at `http://localhost:8080`
+- ACIP dashboard at `http://localhost:5173`
 - PostgreSQL at `localhost:5432`
 - Mock OpenAI-compatible LLM at `http://localhost:8090`
 
@@ -94,6 +116,22 @@ The default runtime expects PostgreSQL:
 
 Compose overrides these values so the default stack uses `MOCK_LLM` with no API key requirement.
 
+Sprint 2 adds these configuration values:
+
+| Variable | Default |
+| --- | --- |
+| `WORK_TRACKING_PROVIDER` | `mock` |
+| `DEMO_DATA_ENABLED` | `false` |
+| `DEMO_USAGE_EVENT_COUNT` | `2000` |
+| `JIRA_BASE_URL` | empty |
+| `JIRA_EMAIL` | empty |
+| `JIRA_API_TOKEN` | empty |
+| `JIRA_DEFAULT_JQL` | `project is not EMPTY ORDER BY updated DESC` |
+
+Docker Compose enables demo data by default, using the mock work tracking provider.
+
+Jira credentials should be supplied through environment variables or a local secret manager. Do not commit Jira API tokens to the repository.
+
 ## API
 
 ### Proxy Chat Completions
@@ -129,6 +167,91 @@ The OpenAI response body and status are returned to the caller. ACIP stores usag
 
 Returns recent usage events, newest first. `limit` is bounded to `1..500`.
 
+`GET /api/v1/usage/events/{id}`
+
+Returns one usage event for request detail inspection.
+
+### Jira Sync
+
+`POST /api/v1/jira/sync`
+
+Syncs epics and stories from the configured work tracking provider into reporting tables. With `WORK_TRACKING_PROVIDER=mock`, this loads the local demo stories and epics. With `WORK_TRACKING_PROVIDER=jira`, Jira credentials must be configured.
+
+Optional request body:
+
+```json
+{
+  "jql": "project = KAN ORDER BY updated DESC"
+}
+```
+
+### Spend Reports
+
+Report endpoints support optional `startDate` and `endDate` query parameters. Values may be ISO dates such as `2026-06-01` or ISO date-times such as `2026-06-01T12:00:00Z`.
+
+`GET /api/v1/reports/overview`
+
+`GET /api/v1/reports/spend/by-story`
+
+`GET /api/v1/reports/spend/by-epic`
+
+`GET /api/v1/reports/spend/by-team`
+
+`GET /api/v1/reports/allocation`
+
+`GET /api/v1/reports/potential-waste`
+
+Returns persisted usage spend totals, allocation buckets, potential waste observations, and grouped spend by story, epic, or team. Aggregation happens in backend report services so the dashboard can consume stable DTOs.
+
+### Attribution Coverage
+
+`GET /api/v1/reports/attribution-coverage`
+
+Returns total cost, valid attributed cost, unattributed cost, event counts, and cost-based coverage percentage.
+
+### Unattributed Spend
+
+`GET /api/v1/reports/unattributed`
+
+Optional query parameters:
+
+- `fromDate`
+- `toDate`
+- `teamKey`
+- `userKey`
+- `attributionStatus`
+- `sort`: `cost_desc`, `tokens_desc`, or `recent`
+
+`GET /api/v1/reports/unattributed/summary`
+
+Returns total unattributed cost, tokens, event count, and cost breakdown by attribution status.
+
+## Frontend Development
+
+The dashboard lives in `frontend/`.
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite dev server runs at `http://localhost:5173` and proxies `/api` calls to `http://localhost:8080`.
+
+When testing the Ollama-backed API on port `8081`, point the dev proxy at that instance:
+
+```powershell
+$env:VITE_API_PROXY_TARGET = "http://localhost:8081"
+npm run dev
+```
+
+Build the frontend:
+
+```powershell
+cd frontend
+npm run build
+```
+
 ## Local Verification
 
 Run tests with Maven:
@@ -141,4 +264,21 @@ If Maven is not on `PATH`, use the installed Maven wrapper distribution:
 
 ```powershell
 & "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" test
+```
+
+To run the opt-in Jira Cloud integration test, provide Jira settings from your shell or secret manager first:
+
+```powershell
+$env:JIRA_BASE_URL = "https://your-site.atlassian.net"
+$env:JIRA_EMAIL = "your-service-account@example.com"
+$env:JIRA_API_TOKEN = "<from your secret manager>"
+$env:JIRA_DEFAULT_JQL = "project = KAN ORDER BY updated DESC"
+$env:JIRA_EXPECTED_STORY_KEY = "<optional known story key>"
+& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" -Dtest=JiraWorkTrackingProviderIntegrationTest test
+```
+
+For local-only testing, you can also create an ignored `.env.jira.local` file with the same variables and run:
+
+```powershell
+.\scripts\run-jira-integration-test.ps1
 ```

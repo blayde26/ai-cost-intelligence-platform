@@ -6,6 +6,8 @@ import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class UsageEventRepository {
@@ -21,8 +23,10 @@ public class UsageEventRepository {
                 INSERT INTO ai_usage_events (
                     id, provider, model, story_key, epic_key, team_key, user_key,
                     prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
-                    latency_ms, request_timestamp, environment, work_type, request_status, request_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                    repository, branch, commit_hash, initiative_key, initiative_name,
+                    attribution_corrected, corrected_timestamp, corrected_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         jdbcTemplate.update(sql,
                 event.id(),
@@ -41,7 +45,16 @@ public class UsageEventRepository {
                 event.environment(),
                 event.workType(),
                 event.requestStatus(),
-                event.requestHash()
+                event.attributionStatus().name(),
+                event.requestHash(),
+                event.repository(),
+                event.branch(),
+                event.commitHash(),
+                event.initiativeKey(),
+                event.initiativeName(),
+                event.attributionCorrected(),
+                event.correctedTimestamp(),
+                event.correctedBy()
         );
     }
 
@@ -49,12 +62,29 @@ public class UsageEventRepository {
         String sql = """
                 SELECT id, provider, model, story_key, epic_key, team_key, user_key,
                        prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
-                       latency_ms, request_timestamp, environment, work_type, request_status, request_hash
+                       latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       repository, branch, commit_hash, initiative_key, initiative_name,
+                       attribution_corrected, corrected_timestamp, corrected_by
                 FROM ai_usage_events
                 ORDER BY request_timestamp DESC
                 LIMIT ?
                 """;
         return jdbcTemplate.query(sql, this::mapEvent, limit);
+    }
+
+    public Optional<UsageEvent> findById(UUID id) {
+        String sql = """
+                SELECT id, provider, model, story_key, epic_key, team_key, user_key,
+                       prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
+                       latency_ms, request_timestamp, environment, work_type, request_status, attribution_status, request_hash,
+                       repository, branch, commit_hash, initiative_key, initiative_name,
+                       attribution_corrected, corrected_timestamp, corrected_by
+                FROM ai_usage_events
+                WHERE id = ?
+                """;
+        return jdbcTemplate.query(sql, this::mapEvent, id)
+                .stream()
+                .findFirst();
     }
 
     private UsageEvent mapEvent(ResultSet rs, int rowNum) throws SQLException {
@@ -75,7 +105,16 @@ public class UsageEventRepository {
                 rs.getString("environment"),
                 rs.getString("work_type"),
                 rs.getString("request_status"),
-                rs.getString("request_hash")
+                AttributionStatus.valueOf(rs.getString("attribution_status")),
+                rs.getString("request_hash"),
+                rs.getString("repository"),
+                rs.getString("branch"),
+                rs.getString("commit_hash"),
+                rs.getString("initiative_key"),
+                rs.getString("initiative_name"),
+                rs.getBoolean("attribution_corrected"),
+                rs.getObject("corrected_timestamp", java.time.OffsetDateTime.class),
+                rs.getString("corrected_by")
         );
     }
 }
