@@ -1,6 +1,9 @@
 package com.acip.proxy;
 
 import com.acip.pricing.PricingService;
+import com.acip.usage.AttributionInference;
+import com.acip.usage.AttributionInferenceService;
+import com.acip.usage.AttributionSource;
 import com.acip.usage.AttributionStatus;
 import com.acip.usage.AttributionStatusService;
 import com.acip.usage.UsageEvent;
@@ -37,6 +40,7 @@ public class OpenAiProxyService {
     private final PricingService pricingService;
     private final UsageEventRepository usageEventRepository;
     private final WorkTrackingProvider workTrackingProvider;
+    private final AttributionInferenceService attributionInferenceService;
     private final AttributionStatusService attributionStatusService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -49,10 +53,11 @@ public class OpenAiProxyService {
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
             WorkTrackingProvider workTrackingProvider,
+            AttributionInferenceService attributionInferenceService,
             AttributionStatusService attributionStatusService,
             ObjectMapper objectMapper
     ) {
-        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, workTrackingProvider, attributionStatusService, objectMapper, Clock.systemUTC());
+        this(openAiGateway, openAiProperties, usageParser, pricingService, usageEventRepository, workTrackingProvider, attributionInferenceService, attributionStatusService, objectMapper, Clock.systemUTC());
     }
 
     OpenAiProxyService(
@@ -62,6 +67,7 @@ public class OpenAiProxyService {
             PricingService pricingService,
             UsageEventRepository usageEventRepository,
             WorkTrackingProvider workTrackingProvider,
+            AttributionInferenceService attributionInferenceService,
             AttributionStatusService attributionStatusService,
             ObjectMapper objectMapper,
             Clock clock
@@ -72,6 +78,7 @@ public class OpenAiProxyService {
         this.pricingService = pricingService;
         this.usageEventRepository = usageEventRepository;
         this.workTrackingProvider = workTrackingProvider;
+        this.attributionInferenceService = attributionInferenceService;
         this.attributionStatusService = attributionStatusService;
         this.objectMapper = objectMapper;
         this.clock = clock;
@@ -96,17 +103,19 @@ public class OpenAiProxyService {
                 usage.promptTokens(),
                 usage.completionTokens()
         );
-        WorkItem story = findStory(envelope.attribution().storyKey()).orElse(null);
-        AttributionStatus attributionStatus = attributionStatusService.classify(envelope.attribution().storyKey());
+        ProxyAttribution attribution = envelope.attribution();
+        AttributionInference inference = attributionInferenceService.infer(attribution.storyKey(), attribution.branch());
+        WorkItem story = findStory(inference.storyKey()).orElse(null);
+        AttributionStatus attributionStatus = attributionStatusService.classify(inference.storyKey());
 
         usageEventRepository.save(new UsageEvent(
                 UUID.randomUUID(),
                 openAiProperties.provider(),
                 model,
-                envelope.attribution().storyKey(),
+                inference.storyKey(),
                 story == null ? null : story.epicKey(),
-                envelope.attribution().teamKey(),
-                envelope.attribution().userKey(),
+                attribution.teamKey(),
+                attribution.userKey(),
                 usage.promptTokens(),
                 usage.completionTokens(),
                 usage.totalTokens(),
@@ -117,7 +126,19 @@ public class OpenAiProxyService {
                 story == null ? "UNKNOWN" : story.workType(),
                 upstreamResponse.statusCode().is2xxSuccessful() ? "SUCCEEDED" : "FAILED",
                 attributionStatus,
-                requestHash
+                requestHash,
+                inference.source(),
+                inference.confidence(),
+                inference.source() == AttributionSource.INFERRED_BRANCH ? inference.storyKey() : null,
+                inference.reason(),
+                normalize(attribution.repository()),
+                normalize(attribution.branch()),
+                normalize(attribution.commitHash()),
+                null,
+                null,
+                false,
+                null,
+                null
         ));
 
         return ResponseEntity.status(upstreamResponse.statusCode())
@@ -150,6 +171,10 @@ public class OpenAiProxyService {
         } catch (RuntimeException exception) {
             return Optional.empty();
         }
+    }
+
+    private String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private long elapsedMs(long startNanos) {
