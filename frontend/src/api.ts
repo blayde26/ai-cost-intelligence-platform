@@ -85,6 +85,10 @@ export type UsageEvent = {
   requestStatus: string;
   attributionStatus: string;
   requestHash: string;
+  attributionSource: string;
+  attributionConfidence: string;
+  inferredStoryKey: string | null;
+  inferenceReason: string | null;
   repository: string | null;
   branch: string | null;
   commitHash: string | null;
