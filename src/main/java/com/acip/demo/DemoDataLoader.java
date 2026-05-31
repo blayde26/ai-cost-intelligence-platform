@@ -178,8 +178,8 @@ public class DemoDataLoader implements CommandLineRunner {
                             id, provider, model, story_key, epic_key, team_key, user_key,
                             prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
                             latency_ms, request_timestamp, environment, work_type, request_status,
-                            attribution_status, request_hash
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            attribution_status, request_hash, attribution_source, attribution_confidence, inference_reason
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 UUID.randomUUID(),
                 "OLLAMA",
@@ -198,7 +198,10 @@ public class DemoDataLoader implements CommandLineRunner {
                 workType,
                 "SUCCEEDED",
                 attributionStatus.name(),
-                requestHash(storyKey, timestamp)
+                requestHash(storyKey, timestamp),
+                storyKey == null ? "MISSING" : "EXPLICIT",
+                storyKey == null ? "LOW" : "HIGH",
+                storyKey == null ? "Demo event intentionally omits a story key." : "Demo event includes an explicit story key."
         );
     }
 
