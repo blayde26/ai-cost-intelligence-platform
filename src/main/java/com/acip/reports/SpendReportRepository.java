@@ -112,7 +112,7 @@ public class SpendReportRepository {
                 SELECT
                     COALESCE(SUM(CASE WHEN LOWER(COALESCE(s.status, '')) IN ('cancelled', 'canceled') THEN e.estimated_cost_usd ELSE 0 END), 0) AS cancelled_story_spend,
                     COALESCE(SUM(CASE WHEN e.work_type IN ('OPERATIONAL', 'SUPPORT') THEN e.estimated_cost_usd ELSE 0 END), 0) AS operational_spend,
-                    COALESCE(SUM(CASE WHEN e.attribution_status <> 'VALID' THEN e.estimated_cost_usd ELSE 0 END), 0) AS unknown_attribution_spend,
+                    COALESCE(SUM(CASE WHEN e.attribution_status NOT IN ('VALID', 'MANUAL') THEN e.estimated_cost_usd ELSE 0 END), 0) AS unknown_attribution_spend,
                     COALESCE(SUM(CASE WHEN e.request_status <> 'SUCCEEDED' THEN e.estimated_cost_usd ELSE 0 END), 0) AS failed_request_spend
                 FROM ai_usage_events e
                 LEFT JOIN stories s ON s.story_key = e.story_key
@@ -128,7 +128,7 @@ public class SpendReportRepository {
                 FROM (
                     SELECT e.estimated_cost_usd,
                            CASE
-                               WHEN e.attribution_status <> 'VALID' THEN 'Unattributed'
+                               WHEN e.attribution_status NOT IN ('VALID', 'MANUAL') THEN 'Unattributed'
                                WHEN e.request_status <> 'SUCCEEDED'
                                     OR LOWER(COALESCE(s.status, '')) IN ('cancelled', 'canceled') THEN 'Potential Waste'
                                WHEN e.work_type IN ('OPERATIONAL', 'SUPPORT') THEN 'Operations'

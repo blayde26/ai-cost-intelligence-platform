@@ -95,10 +95,33 @@ export type UsageEvent = {
   correctedBy: string | null;
 };
 
+export type AttributionCorrectionRequest = {
+  storyKey?: string | null;
+  epicKey?: string | null;
+  teamKey?: string | null;
+  workType?: string | null;
+  correctedBy: string;
+  note?: string | null;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`);
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
@@ -114,5 +137,7 @@ export const api = {
   spendByEpic: () => getJson<SpendByEpic[]>('/api/v1/reports/spend/by-epic'),
   spendByTeam: () => getJson<SpendByTeam[]>('/api/v1/reports/spend/by-team'),
   usageEvents: () => getJson<UsageEvent[]>('/api/v1/usage/events?limit=100'),
-  usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`)
+  usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`),
+  correctAttribution: (id: string, request: AttributionCorrectionRequest) =>
+    patchJson<UsageEvent>(`/api/v1/usage/events/${id}/attribution`, request)
 };

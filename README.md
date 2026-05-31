@@ -34,6 +34,13 @@ ACIP is an AI FinOps platform that attributes AI usage and estimated spend to en
 - Attribution health and potential waste dashboard pages
 - Recent request list and request detail inspection
 
+## Sprint 4 Scope
+
+- Manual attribution correction from the request detail dashboard
+- Correction API for assigning usage to a story, epic, team, and work type after capture
+- Correction history table for auditability
+- Corrected events are surfaced as `MANUAL` attribution without blocking AI usage
+
 ## Quick Start
 
 Start the default local stack:
@@ -170,6 +177,23 @@ Returns recent usage events, newest first. `limit` is bounded to `1..500`.
 `GET /api/v1/usage/events/{id}`
 
 Returns one usage event for request detail inspection.
+
+`PATCH /api/v1/usage/events/{id}/attribution`
+
+Manually assigns or corrects a usage event after capture. At least one of `storyKey` or `teamKey` must be supplied, and `correctedBy` is required. If `storyKey` matches a known story, ACIP derives the story's epic and work type.
+
+```json
+{
+  "storyKey": "PAY-1001",
+  "epicKey": "PAY-1000",
+  "teamKey": "payments",
+  "workType": "CAPITALIZED",
+  "correctedBy": "brian",
+  "note": "Manual cleanup after missing attribution tag"
+}
+```
+
+The response is the updated usage event with `attributionStatus` set to `MANUAL`, `attributionCorrected` set to `true`, and correction metadata populated.
 
 ### Jira Sync
 

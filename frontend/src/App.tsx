@@ -2,12 +2,14 @@ import {
   Alert,
   AppBar,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Container,
   Divider,
   IconButton,
   LinearProgress,
+  MenuItem,
   Paper,
   Stack,
   Tab,
@@ -18,6 +20,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Toolbar,
   Tooltip,
   Typography
@@ -32,6 +35,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AttributionCorrectionRequest,
   AttributionCoverage,
   PotentialWaste,
   SpendAllocation,
@@ -140,6 +144,11 @@ export default function App() {
     window.location.hash = `/${view}`;
   }
 
+  async function handleAttributionCorrected(event: UsageEvent) {
+    setSelectedEvent(event);
+    await loadDashboard();
+  }
+
   return (
     <Box className="app-shell">
       <AppBar position="sticky" color="inherit" elevation={0} className="topbar">
@@ -191,7 +200,13 @@ export default function App() {
             {route.view === 'attribution' && <AttributionHealthView coverage={data.coverage} events={data.events} />}
             {route.view === 'waste' && <PotentialWasteView waste={data.waste} />}
             {route.view === 'usage' && (
-              <UsageExplorerView events={data.events} selectedEvent={selectedEvent} detailLoading={detailLoading} />
+              <UsageExplorerView
+                events={data.events}
+                selectedEvent={selectedEvent}
+                detailLoading={detailLoading}
+                stories={data.stories}
+                onCorrected={(event) => void handleAttributionCorrected(event)}
+              />
             )}
           </>
         )}
@@ -422,18 +437,22 @@ function PotentialWasteView({ waste }: { waste: PotentialWaste }) {
 function UsageExplorerView({
   events,
   selectedEvent,
-  detailLoading
+  detailLoading,
+  stories,
+  onCorrected
 }: {
   events: UsageEvent[];
   selectedEvent: UsageEvent | null;
   detailLoading: boolean;
+  stories: SpendByStory[];
+  onCorrected: (event: UsageEvent) => void;
 }) {
   return (
     <Box className="requests-layout">
       <ReportPanel title="Raw Usage Events">
         <UsageEventTable events={events} />
       </ReportPanel>
-      <RequestDetail event={selectedEvent} loading={detailLoading} />
+      <RequestDetail event={selectedEvent} loading={detailLoading} stories={stories} onCorrected={onCorrected} />
     </Box>
   );
 }
@@ -523,7 +542,17 @@ function MiniSpendList({ rows }: { rows: Array<{ key: string; label: string; cos
   );
 }
 
-function RequestDetail({ event, loading }: { event: UsageEvent | null; loading: boolean }) {
+function RequestDetail({
+  event,
+  loading,
+  stories,
+  onCorrected
+}: {
+  event: UsageEvent | null;
+  loading: boolean;
+  stories: SpendByStory[];
+  onCorrected: (event: UsageEvent) => void;
+}) {
   return (
     <Paper className="panel detail-panel">
       <Typography variant="h2">Request Detail</Typography>
@@ -553,9 +582,127 @@ function RequestDetail({ event, loading }: { event: UsageEvent | null; loading: 
             <Typography variant="caption" color="text.secondary">Attribution</Typography>
             <StatusChip value={event.attributionStatus} />
           </Stack>
+          <CorrectionForm event={event} stories={stories} onCorrected={onCorrected} />
         </Stack>
       )}
     </Paper>
+  );
+}
+
+function CorrectionForm({
+  event,
+  stories,
+  onCorrected
+}: {
+  event: UsageEvent;
+  stories: SpendByStory[];
+  onCorrected: (event: UsageEvent) => void;
+}) {
+  const [storyKey, setStoryKey] = useState(event.storyKey ?? '');
+  const [epicKey, setEpicKey] = useState(event.epicKey ?? '');
+  const [teamKey, setTeamKey] = useState(event.teamKey ?? '');
+  const [workType, setWorkType] = useState(event.workType ?? 'UNKNOWN');
+  const [correctedBy, setCorrectedBy] = useState(event.userKey ?? '');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStoryKey(event.storyKey ?? '');
+    setEpicKey(event.epicKey ?? '');
+    setTeamKey(event.teamKey ?? '');
+    setWorkType(event.workType ?? 'UNKNOWN');
+    setCorrectedBy(event.userKey ?? '');
+    setNote('');
+    setMessage(null);
+    setFormError(null);
+  }, [event.id, event.epicKey, event.storyKey, event.teamKey, event.userKey, event.workType]);
+
+  function selectStory(value: string) {
+    setStoryKey(value);
+    const story = stories.find((candidate) => candidate.storyKey === value);
+    if (story) {
+      setEpicKey(story.epicKey ?? '');
+      setTeamKey(story.teamKey ?? '');
+    }
+  }
+
+  async function submitCorrection() {
+    setSaving(true);
+    setMessage(null);
+    setFormError(null);
+    try {
+      const request: AttributionCorrectionRequest = {
+        storyKey: emptyToNull(storyKey),
+        epicKey: emptyToNull(epicKey),
+        teamKey: emptyToNull(teamKey),
+        workType: emptyToNull(workType),
+        correctedBy: correctedBy.trim(),
+        note: emptyToNull(note)
+      };
+      const corrected = await api.correctAttribution(event.id, request);
+      setMessage('Attribution saved');
+      onCorrected(corrected);
+    } catch (exception) {
+      setFormError(exception instanceof Error ? exception.message : 'Unable to save attribution');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canSubmit = !saving && correctedBy.trim().length > 0 && (storyKey.trim().length > 0 || teamKey.trim().length > 0);
+
+  return (
+    <Stack spacing={1.25} className="correction-form">
+      <Divider />
+      <Stack spacing={0.5}>
+        <Typography variant="h3">Manual Attribution</Typography>
+        {event.attributionCorrected && (
+          <Typography variant="caption" color="text.secondary">
+            Last corrected by {event.correctedBy ?? 'unknown'} {event.correctedTimestamp ? `on ${timestamp(event.correctedTimestamp)}` : ''}
+          </Typography>
+        )}
+      </Stack>
+      {message && <Alert severity="success">{message}</Alert>}
+      {formError && <Alert severity="error">{formError}</Alert>}
+      <Box className="form-grid">
+        <TextField
+          label="Story key"
+          size="small"
+          value={storyKey}
+          onChange={(input) => selectStory(input.target.value)}
+          inputProps={{ list: 'story-key-options' }}
+        />
+        <datalist id="story-key-options">
+          {stories
+            .filter((story) => story.storyKey)
+            .map((story) => (
+              <option key={story.storyKey ?? ''} value={story.storyKey ?? ''}>
+                {story.storyName ?? story.storyKey}
+              </option>
+            ))}
+        </datalist>
+        <TextField label="Epic key" size="small" value={epicKey} onChange={(input) => setEpicKey(input.target.value)} />
+        <TextField label="Team key" size="small" value={teamKey} onChange={(input) => setTeamKey(input.target.value)} />
+        <TextField select label="Work type" size="small" value={workType} onChange={(input) => setWorkType(input.target.value)}>
+          {['CAPITALIZED', 'OPERATIONAL', 'RESEARCH', 'SUPPORT', 'UNKNOWN'].map((value) => (
+            <MenuItem key={value} value={value}>{value}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          label="Corrected by"
+          size="small"
+          value={correctedBy}
+          onChange={(input) => setCorrectedBy(input.target.value)}
+          required
+        />
+        <TextField label="Note" size="small" value={note} onChange={(input) => setNote(input.target.value)} />
+      </Box>
+      <Button variant="contained" onClick={() => void submitCorrection()} disabled={!canSubmit}>
+        {saving ? 'Saving attribution' : 'Save attribution'}
+      </Button>
+    </Stack>
   );
 }
 
@@ -592,4 +739,9 @@ function EmptyState() {
 
 function wasteTotal(waste: PotentialWaste) {
   return waste.cancelledStorySpend + waste.operationalSpend + waste.unknownAttributionSpend + waste.failedRequestSpend;
+}
+
+function emptyToNull(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
