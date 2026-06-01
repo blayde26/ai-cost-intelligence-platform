@@ -45,7 +45,7 @@ public class JiraClient {
         String nextPageToken = null;
         boolean isLast;
         do {
-            JsonNode page = fetchPage(jql, nextPageToken);
+            JsonNode page = fetchPage(jql, properties.pageSize(), nextPageToken);
             JsonNode issueNodes = page.path("issues");
             if (!issueNodes.isArray()) {
                 throw new ResponseStatusException(BAD_GATEWAY, "Jira search response did not include issues.");
@@ -55,6 +55,20 @@ public class JiraClient {
             nextPageToken = page.path("nextPageToken").asText(null);
         } while (!isLast && nextPageToken != null && !nextPageToken.isBlank());
 
+        return issues;
+    }
+
+    public List<WorkItem> searchFirstPage(String jql, int maxResults) {
+        if (!properties.isConfigured()) {
+            throw new ResponseStatusException(SERVICE_UNAVAILABLE, "Jira is not configured.");
+        }
+        JsonNode page = fetchPage(jql, Math.max(1, Math.min(maxResults, properties.pageSize())), null);
+        JsonNode issueNodes = page.path("issues");
+        if (!issueNodes.isArray()) {
+            throw new ResponseStatusException(BAD_GATEWAY, "Jira search response did not include issues.");
+        }
+        List<WorkItem> issues = new ArrayList<>();
+        issueNodes.forEach(issue -> issues.add(issueMapper.map(issue)));
         return issues;
     }
 
@@ -74,11 +88,11 @@ public class JiraClient {
         return searchIssues("key = " + epicKey).stream().filter(WorkItem::isEpic).findFirst();
     }
 
-    private JsonNode fetchPage(String jql, String nextPageToken) {
+    private JsonNode fetchPage(String jql, int maxResults, String nextPageToken) {
         try {
             Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("jql", jql);
-            body.put("maxResults", properties.pageSize());
+            body.put("maxResults", maxResults);
             body.put("fields", fields());
             if (nextPageToken != null && !nextPageToken.isBlank()) {
                 body.put("nextPageToken", nextPageToken);

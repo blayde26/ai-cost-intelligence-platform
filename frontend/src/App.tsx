@@ -26,6 +26,7 @@ import {
   Typography
 } from '@mui/material';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import GroupsIcon from '@mui/icons-material/Groups';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -42,8 +43,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AttributionCorrectionRequest,
   AttributionCoverage,
+  JiraConnectionTestResult,
+  ModelUtilizationSnapshot,
   OutcomeCorrelationReport,
+  PilotReadinessReport,
   PotentialWaste,
+  ProviderUtilizationSnapshot,
   RepositoryAnalyticsSnapshot,
   SourceControlDiagnosticsReport,
   SetupHealthComponent,
@@ -56,7 +61,8 @@ import {
   TeamAnalyticsSnapshot,
   UsageEvent,
   UsageImportResult,
-  api
+  api,
+  apiUrl
 } from './api';
 import { compactNumber, integer, money, percent, timestamp } from './format';
 
@@ -72,10 +78,13 @@ type DashboardData = {
   teams: SpendByTeam[];
   events: UsageEvent[];
   setupHealth: SetupHealthReport;
+  pilotReadiness: PilotReadinessReport;
   sourceControlDiagnostics: SourceControlDiagnosticsReport;
   teamOutcomes: TeamAnalyticsSnapshot[];
   repositoryOutcomes: RepositoryAnalyticsSnapshot[];
   outcomeCorrelations: OutcomeCorrelationReport;
+  providerUtilization: ProviderUtilizationSnapshot[];
+  modelUtilization: ModelUtilizationSnapshot[];
 };
 
 const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
@@ -143,7 +152,24 @@ export default function App() {
     }
     setError(null);
     try {
-      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, sourceControlDiagnostics, teamOutcomes, repositoryOutcomes, outcomeCorrelations] = await Promise.all([
+      const [
+        overview,
+        coverage,
+        allocation,
+        waste,
+        stories,
+        epics,
+        teams,
+        events,
+        setupHealth,
+        pilotReadiness,
+        sourceControlDiagnostics,
+        teamOutcomes,
+        repositoryOutcomes,
+        outcomeCorrelations,
+        providerUtilization,
+        modelUtilization
+      ] = await Promise.all([
         api.overview(),
         api.coverage(),
         api.allocation(),
@@ -153,12 +179,32 @@ export default function App() {
         api.spendByTeam(),
         api.usageEvents(),
         api.setupHealth(),
+        api.pilotReadiness(),
         api.sourceControlDiagnostics(),
         api.teamEffectiveness(),
         api.repositoryAnalytics(),
-        api.outcomeCorrelations()
+        api.outcomeCorrelations(),
+        api.providerUtilization(),
+        api.modelUtilization()
       ]);
-      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, sourceControlDiagnostics, teamOutcomes, repositoryOutcomes, outcomeCorrelations });
+      setData({
+        overview,
+        coverage,
+        allocation,
+        waste,
+        stories,
+        epics,
+        teams,
+        events,
+        setupHealth,
+        pilotReadiness,
+        sourceControlDiagnostics,
+        teamOutcomes,
+        repositoryOutcomes,
+        outcomeCorrelations,
+        providerUtilization,
+        modelUtilization
+      });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to load dashboard data');
     } finally {
@@ -240,7 +286,7 @@ export default function App() {
               <OutcomeAnalyticsView teams={data.teamOutcomes} repositories={data.repositoryOutcomes} correlations={data.outcomeCorrelations} />
             )}
             {route.view === 'setup' && (
-              <SetupView health={data.setupHealth} sourceControl={data.sourceControlDiagnostics} onImported={() => void loadDashboard(false)} />
+              <SetupView health={data.setupHealth} pilotReadiness={data.pilotReadiness} sourceControl={data.sourceControlDiagnostics} onImported={() => void loadDashboard(false)} />
             )}
           </>
         )}
@@ -289,6 +335,26 @@ function OverviewView({ data }: { data: DashboardData }) {
           <DetailRow label="Unattributed spend" value={money(data.coverage.unattributedCost)} />
         </Paper>
       </Box>
+      <Box className="two-column">
+        <Paper className="panel">
+          <Typography variant="h2">Provider Mix</Typography>
+          <MiniSpendList rows={data.providerUtilization.slice(0, 5).map((provider) => ({
+            key: provider.provider,
+            label: `${percent(provider.costPercent)} of spend across ${integer(provider.modelCount)} models`,
+            cost: provider.totalCost,
+            tokens: provider.totalTokens
+          }))} />
+        </Paper>
+        <Paper className="panel">
+          <Typography variant="h2">Model Mix</Typography>
+          <MiniSpendList rows={data.modelUtilization.slice(0, 5).map((model) => ({
+            key: model.model,
+            label: `${model.provider} / ${integer(model.requestCount)} requests / ${percent(model.costPercent)}`,
+            cost: model.totalCost,
+            tokens: model.totalTokens
+          }))} />
+        </Paper>
+      </Box>
     </Stack>
   );
 }
@@ -317,6 +383,7 @@ function AllocationBars({ allocation }: { allocation: SpendAllocation }) {
 function TeamAnalysisView({ teams }: { teams: SpendByTeam[] }) {
   return (
     <ReportPanel title="Cost by Team">
+      <CsvExportButton href="/api/v1/reports/spend/by-team.csv" label="Export teams CSV" />
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -352,6 +419,7 @@ function EpicAnalysisView({ epics, stories }: { epics: SpendByEpic[]; stories: S
   return (
     <Stack spacing={2.5}>
       <ReportPanel title="Cost by Epic">
+        <CsvExportButton href="/api/v1/reports/spend/by-epic.csv" label="Export epics CSV" />
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -383,6 +451,7 @@ function EpicAnalysisView({ epics, stories }: { epics: SpendByEpic[]; stories: S
         </TableContainer>
       </ReportPanel>
       <ReportPanel title="Cost by Story">
+        <CsvExportButton href="/api/v1/reports/spend/by-story.csv" label="Export stories CSV" />
         <StorySpendTable stories={stories} />
       </ReportPanel>
     </Stack>
@@ -484,6 +553,7 @@ function UsageExplorerView({
   return (
     <Box className="requests-layout">
       <ReportPanel title="Raw Usage Events">
+        <CsvExportButton href="/api/v1/usage/events.csv?limit=100" label="Export usage CSV" />
         <UsageEventTable events={events} />
       </ReportPanel>
       <RequestDetail event={selectedEvent} loading={detailLoading} stories={stories} onCorrected={onCorrected} />
@@ -542,10 +612,12 @@ function UsageEventTable({ events }: { events: UsageEvent[] }) {
 
 function SetupView({
   health,
+  pilotReadiness,
   sourceControl,
   onImported
 }: {
   health: SetupHealthReport;
+  pilotReadiness: PilotReadinessReport;
   sourceControl: SourceControlDiagnosticsReport;
   onImported: () => void;
 }) {
@@ -561,10 +633,11 @@ function SetupView({
     <Stack spacing={2.5}>
       <Box className="metric-grid">
         <MetricCard label="Overall setup" value={health.overallStatus.replace(/_/g, ' ')} />
+        <MetricCard label="Pilot readiness" value={`${integer(pilotReadiness.score)}%`} detail={pilotReadiness.status.replace(/_/g, ' ')} />
         <MetricCard label="Ready checks" value={integer(health.components.filter((item) => item.status === 'READY').length)} detail={`${integer(health.components.length)} total checks`} />
         <MetricCard label="Warnings" value={integer(health.components.filter((item) => item.status === 'WARNING').length)} />
-        <MetricCard label="Not configured" value={integer(health.components.filter((item) => item.status === 'NOT_CONFIGURED').length)} />
       </Box>
+      <PilotReadinessPanel report={pilotReadiness} />
       <Box className="two-column">
         <ReportPanel title="Integration Health">
           <Stack spacing={1.25}>
@@ -586,6 +659,41 @@ function SetupView({
         <SetupIntegrationDetail component={activeComponent} sourceControl={sourceControl} />
       )}
     </Stack>
+  );
+}
+
+function PilotReadinessPanel({ report }: { report: PilotReadinessReport }) {
+  return (
+    <ReportPanel title="Pilot Readiness">
+      <Stack spacing={1.5}>
+        <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center" flexWrap="wrap">
+          <Typography color="text.secondary">{report.summary}</Typography>
+          <StatusChip value={report.status} />
+        </Stack>
+        <LinearProgress variant="determinate" value={Math.min(100, Math.max(0, report.score))} className="coverage-bar" />
+        <Box className="readiness-grid">
+          {report.checks.map((check) => (
+            <Box key={check.key} className="readiness-check">
+              <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
+                <Typography fontWeight={750}>{check.label}</Typography>
+                <StatusChip value={check.status} />
+              </Stack>
+              <Typography variant="body2" color="text.secondary">{check.message}</Typography>
+            </Box>
+          ))}
+        </Box>
+        {report.recommendedActions.length > 0 && (
+          <Alert severity="info">
+            <Stack spacing={0.75}>
+              <Typography fontWeight={750}>Recommended next actions</Typography>
+              {report.recommendedActions.map((action) => (
+                <Typography key={action} variant="body2">{action}</Typography>
+              ))}
+            </Stack>
+          </Alert>
+        )}
+      </Stack>
+    </ReportPanel>
   );
 }
 
@@ -662,6 +770,23 @@ function SetupIntegrationDetail({
 }
 
 function JiraSetupPanel({ component }: { component: SetupHealthComponent }) {
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<JiraConnectionTestResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function testConnection() {
+    setTesting(true);
+    setResult(null);
+    setError(null);
+    try {
+      setResult(await api.jiraConnectionTest());
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Unable to test Jira connection');
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <ReportPanel title="Jira Setup">
       <Stack spacing={1.5}>
@@ -678,6 +803,24 @@ function JiraSetupPanel({ component }: { component: SetupHealthComponent }) {
           <DetailRow label="JIRA_API_TOKEN" value="stored outside git" />
           <DetailRow label="JIRA_DEFAULT_JQL" value="project = KAN ORDER BY updated DESC" />
         </Box>
+        <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+          <Button variant="contained" onClick={() => void testConnection()} disabled={testing}>
+            {testing ? 'Testing Jira' : 'Test Jira connection'}
+          </Button>
+          {result && <StatusChip value={result.status} />}
+        </Stack>
+        {testing && <LinearProgress />}
+        {error && <Alert severity="error">Jira connection test failed: {error}</Alert>}
+        {result && (
+          <Box className="setup-detail-grid">
+            <DetailRow label="Configured" value={result.configured ? 'Yes' : 'No'} />
+            <DetailRow label="Reachable" value={result.reachable ? 'Yes' : 'No'} />
+            <DetailRow label="Issues readable" value={result.issuesReadable ? 'Yes' : 'No'} />
+            <DetailRow label="Issues fetched" value={integer(result.issuesFetched)} />
+            <DetailRow label="Sample issue" value={result.sampleIssueKey ?? 'None'} />
+            <Typography variant="body2" color="text.secondary">{result.message}</Typography>
+          </Box>
+        )}
         <Alert severity="info">
           Jira credentials should stay in ignored local environment files or your deployment secret store. In-app secret entry needs an encrypted credential store before we make it editable here.
         </Alert>
@@ -768,16 +911,36 @@ function CsvImportPanel({ onImported }: { onImported: () => void }) {
 OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-1002-payment-retry`;
   const [csv, setCsv] = useState(sampleCsv);
   const [importing, setImporting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [resultMode, setResultMode] = useState<'preview' | 'import' | null>(null);
   const [result, setResult] = useState<UsageImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function submitPreview() {
+    setPreviewing(true);
+    setResult(null);
+    setResultMode(null);
+    setError(null);
+    try {
+      const previewResult = await api.previewUsageCsv(csv);
+      setResult(previewResult);
+      setResultMode('preview');
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Unable to preview CSV');
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   async function submitImport() {
     setImporting(true);
     setResult(null);
+    setResultMode(null);
     setError(null);
     try {
       const importResult = await api.importUsageCsv(csv);
       setResult(importResult);
+      setResultMode('import');
       onImported();
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to import CSV');
@@ -792,6 +955,7 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
     }
     setCsv(await file.text());
     setResult(null);
+    setResultMode(null);
     setError(null);
   }
 
@@ -800,32 +964,52 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
       <Stack spacing={1.5}>
         <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
           <Typography variant="h2">CSV Usage Import</Typography>
-          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
-            Choose CSV
-            <input
-              hidden
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(input) => void loadFile(input.target.files?.[0] ?? null)}
-            />
-          </Button>
+          <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
+            <Button component="a" href={apiUrl('/api/v1/usage/imports/samples/minimal')} variant="outlined" size="small" startIcon={<FileDownloadIcon />}>
+              Minimal
+            </Button>
+            <Button component="a" href={apiUrl('/api/v1/usage/imports/samples/openai')} variant="outlined" size="small" startIcon={<FileDownloadIcon />}>
+              OpenAI
+            </Button>
+            <Button component="a" href={apiUrl('/api/v1/usage/imports/samples/advanced')} variant="outlined" size="small" startIcon={<FileDownloadIcon />}>
+              Advanced
+            </Button>
+            <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
+              Choose CSV
+              <input
+                hidden
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(input) => void loadFile(input.target.files?.[0] ?? null)}
+              />
+            </Button>
+          </Stack>
         </Stack>
         <TextField
           label="CSV payload"
           value={csv}
-          onChange={(input) => setCsv(input.target.value)}
+          onChange={(input) => {
+            setCsv(input.target.value);
+            setResult(null);
+            setResultMode(null);
+          }}
           multiline
           minRows={8}
           size="small"
         />
-        <Button variant="contained" onClick={() => void submitImport()} disabled={importing || csv.trim().length === 0}>
-          {importing ? 'Importing usage' : 'Import usage'}
-        </Button>
+        <Stack direction="row" gap={1} flexWrap="wrap">
+          <Button variant="outlined" onClick={() => void submitPreview()} disabled={previewing || importing || csv.trim().length === 0}>
+            {previewing ? 'Previewing rows' : 'Preview import'}
+          </Button>
+          <Button variant="contained" onClick={() => void submitImport()} disabled={importing || previewing || csv.trim().length === 0}>
+            {importing ? 'Importing usage' : 'Import usage'}
+          </Button>
+        </Stack>
         {error && <Alert severity="error">{error}</Alert>}
         {result && (
           <Box className="import-results">
             <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
-              <Typography variant="h3">Import Results</Typography>
+              <Typography variant="h3">{resultMode === 'preview' ? 'Preview Results' : 'Import Results'}</Typography>
               <StatusChip value={result.skippedCount > 0 ? 'WARNING' : 'READY'} />
             </Stack>
             <Box className="import-result-grid">
@@ -843,12 +1027,14 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
               </Paper>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Last import completed with {integer(result.importedCount)} imported and {integer(result.skippedCount)} skipped rows.
+              {resultMode === 'preview' ? 'Preview found' : 'Last import completed with'} {integer(result.importedCount)} valid and {integer(result.skippedCount)} skipped rows.
             </Typography>
           </Box>
         )}
-        {result && result.skippedCount === 0 && <Alert severity="success">CSV import completed without skipped rows.</Alert>}
-        {result && result.skippedCount > 0 && <Alert severity="warning">CSV import completed with row-level issues.</Alert>}
+        {result && resultMode === 'preview' && result.skippedCount === 0 && <Alert severity="success">CSV preview found no skipped rows.</Alert>}
+        {result && resultMode === 'preview' && result.skippedCount > 0 && <Alert severity="warning">CSV preview found row-level issues.</Alert>}
+        {result && resultMode === 'import' && result.skippedCount === 0 && <Alert severity="success">CSV import completed without skipped rows.</Alert>}
+        {result && resultMode === 'import' && result.skippedCount > 0 && <Alert severity="warning">CSV import completed with row-level issues.</Alert>}
         {result && result.errors.length > 0 && (
           <Stack spacing={0.75}>
             {result.errors.slice(0, 5).map((item) => (
@@ -1240,6 +1426,22 @@ function ReportPanel({ title, children }: { title: string; children: React.React
       <Typography variant="h2">{title}</Typography>
       {children}
     </Paper>
+  );
+}
+
+function CsvExportButton({ href, label }: { href: string; label: string }) {
+  return (
+    <Box className="panel-action-row">
+      <Button
+        component="a"
+        href={apiUrl(href)}
+        size="small"
+        variant="outlined"
+        startIcon={<FileDownloadIcon fontSize="small" />}
+      >
+        {label}
+      </Button>
+    </Box>
   );
 }
 

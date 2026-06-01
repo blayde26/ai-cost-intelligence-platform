@@ -117,6 +117,31 @@ export type SetupHealthReport = {
   components: SetupHealthComponent[];
 };
 
+export type PilotReadinessCheck = {
+  key: string;
+  label: string;
+  status: SetupHealthStatus;
+  message: string;
+};
+
+export type PilotReadinessReport = {
+  status: SetupHealthStatus;
+  score: number;
+  summary: string;
+  checks: PilotReadinessCheck[];
+  recommendedActions: string[];
+};
+
+export type JiraConnectionTestResult = {
+  status: SetupHealthStatus;
+  configured: boolean;
+  reachable: boolean;
+  issuesReadable: boolean;
+  issuesFetched: number;
+  sampleIssueKey: string | null;
+  message: string;
+};
+
 export type SourceControlRepositoryDiagnostic = {
   repository: string;
   owner: string | null;
@@ -223,6 +248,26 @@ export type OutcomeCorrelationReport = {
   interpretation: string;
 };
 
+export type ProviderUtilizationSnapshot = {
+  provider: string;
+  totalCost: number;
+  totalTokens: number;
+  requestCount: number;
+  modelCount: number;
+  costPercent: number;
+};
+
+export type ModelUtilizationSnapshot = {
+  provider: string;
+  model: string;
+  totalCost: number;
+  totalTokens: number;
+  requestCount: number;
+  teamCount: number;
+  workTypeCount: number;
+  costPercent: number;
+};
+
 export type AttributionCorrectionRequest = {
   storyKey?: string | null;
   epicKey?: string | null;
@@ -234,8 +279,12 @@ export type AttributionCorrectionRequest = {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await fetch(apiUrl(path));
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
@@ -243,7 +292,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function patchJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json'
@@ -257,7 +306,7 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function postText<T>(path: string, body: string, contentType: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
     headers: {
       'content-type': contentType
@@ -279,11 +328,16 @@ export const api = {
   spendByEpic: () => getJson<SpendByEpic[]>('/api/v1/reports/spend/by-epic'),
   spendByTeam: () => getJson<SpendByTeam[]>('/api/v1/reports/spend/by-team'),
   setupHealth: () => getJson<SetupHealthReport>('/api/v1/setup/health'),
+  pilotReadiness: () => getJson<PilotReadinessReport>('/api/v1/setup/pilot-readiness'),
+  jiraConnectionTest: () => getJson<JiraConnectionTestResult>('/api/v1/jira/connection-test'),
   sourceControlDiagnostics: () => getJson<SourceControlDiagnosticsReport>('/api/v1/source-control/diagnostics'),
   importUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv', csv, 'text/csv'),
+  previewUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv/preview', csv, 'text/csv'),
   teamEffectiveness: () => getJson<TeamAnalyticsSnapshot[]>('/api/v1/analytics/team-effectiveness'),
   repositoryAnalytics: () => getJson<RepositoryAnalyticsSnapshot[]>('/api/v1/analytics/repositories'),
   outcomeCorrelations: () => getJson<OutcomeCorrelationReport>('/api/v1/analytics/correlations'),
+  providerUtilization: () => getJson<ProviderUtilizationSnapshot[]>('/api/v1/analytics/model-utilization/providers'),
+  modelUtilization: () => getJson<ModelUtilizationSnapshot[]>('/api/v1/analytics/model-utilization/models'),
   usageEvents: () => getJson<UsageEvent[]>('/api/v1/usage/events?limit=100'),
   usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`),
   correctAttribution: (id: string, request: AttributionCorrectionRequest) =>

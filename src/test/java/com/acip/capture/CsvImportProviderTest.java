@@ -23,14 +23,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class ManualImportProviderTest {
+class CsvImportProviderTest {
 
     private final UsageEventRepository usageEventRepository = mock(UsageEventRepository.class);
     private final PricingService pricingService = mock(PricingService.class);
     private final WorkTrackingProvider workTrackingProvider = mock(WorkTrackingProvider.class);
     private final AttributionInferenceService attributionInferenceService = new AttributionInferenceService(new BranchStoryKeyParser());
     private final AttributionStatusService attributionStatusService = new AttributionStatusService(workTrackingProvider);
-    private final ManualImportProvider provider = new ManualImportProvider(
+    private final CsvImportProvider provider = new CsvImportProvider(
             usageEventRepository,
             pricingService,
             workTrackingProvider,
@@ -107,5 +107,21 @@ class ManualImportProviderTest {
                     assertThat(error.rowNumber()).isEqualTo(3);
                     assertThat(error.message()).contains("provider");
                 });
+    }
+
+    @Test
+    void previewsCsvRowsWithoutPersistingUsageEvents() {
+        when(workTrackingProvider.findStoryByKey("PAY-1001"))
+                .thenReturn(Optional.of(new WorkItem("PAY-1001", WorkItemType.STORY, "Checkout", "In Progress", "payments", "PAY-1000", "CAPITALIZED")));
+        String csv = """
+                provider,model,storyKey,teamKey,userKey,totalTokens,estimatedCostUsd,requestTimestamp
+                OLLAMA,llama3.2,PAY-1001,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z
+                """;
+
+        UsageImportResult result = provider.previewCsv(csv);
+
+        assertThat(result.importedCount()).isEqualTo(1);
+        assertThat(result.skippedCount()).isZero();
+        org.mockito.Mockito.verifyNoInteractions(usageEventRepository);
     }
 }

@@ -26,7 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-public class ManualImportProvider implements UsageCaptureProvider {
+public class CsvImportProvider implements UsageCaptureProvider, UsageImportProvider {
 
     private final CsvRowParser csvRowParser = new CsvRowParser();
     private final UsageEventRepository usageEventRepository;
@@ -35,7 +35,7 @@ public class ManualImportProvider implements UsageCaptureProvider {
     private final AttributionInferenceService attributionInferenceService;
     private final AttributionStatusService attributionStatusService;
 
-    public ManualImportProvider(
+    public CsvImportProvider(
             UsageEventRepository usageEventRepository,
             PricingService pricingService,
             WorkTrackingProvider workTrackingProvider,
@@ -69,7 +69,35 @@ public class ManualImportProvider implements UsageCaptureProvider {
         return "MANUAL_CSV_IMPORT";
     }
 
+    @Override
+    public String importProviderKey() {
+        return "csv";
+    }
+
+    @Override
+    public String displayName() {
+        return "CSV Usage Import";
+    }
+
+    @Override
+    public UsageImportResult importUsage(String payload) {
+        return importCsv(payload);
+    }
+
+    @Override
+    public UsageImportResult previewUsage(String payload) {
+        return previewCsv(payload);
+    }
+
     public UsageImportResult importCsv(String csv) {
+        return parseCsv(csv, true);
+    }
+
+    public UsageImportResult previewCsv(String csv) {
+        return parseCsv(csv, false);
+    }
+
+    private UsageImportResult parseCsv(String csv, boolean persist) {
         List<UsageImportError> errors = new ArrayList<>();
         if (csv == null || csv.isBlank()) {
             return new UsageImportResult(0, 1, List.of(new UsageImportError(0, "CSV body is required.")));
@@ -96,7 +124,7 @@ public class ManualImportProvider implements UsageCaptureProvider {
             int rowNumber = index + 1;
             try {
                 Map<String, String> row = row(headers, csvRowParser.parseLine(rows.get(index)));
-                importRow(row);
+                processRow(row, persist);
                 imported++;
             } catch (RuntimeException exception) {
                 errors.add(new UsageImportError(rowNumber, exception.getMessage()));
@@ -105,7 +133,7 @@ public class ManualImportProvider implements UsageCaptureProvider {
         return new UsageImportResult(imported, errors.size(), errors);
     }
 
-    private void importRow(Map<String, String> row) {
+    private void processRow(Map<String, String> row, boolean persist) {
         String provider = required(row, "provider");
         String model = required(row, "model");
         String userKey = required(row, "userkey");
@@ -134,7 +162,7 @@ public class ManualImportProvider implements UsageCaptureProvider {
             throw new IllegalArgumentException("teamKey is required when the row cannot be resolved to a known story.");
         }
 
-        usageEventRepository.save(new UsageEvent(
+        UsageEvent event = new UsageEvent(
                 UUID.randomUUID(),
                 provider,
                 model,
@@ -169,7 +197,10 @@ public class ManualImportProvider implements UsageCaptureProvider {
                 false,
                 null,
                 null
-        ));
+        );
+        if (persist) {
+            usageEventRepository.save(event);
+        }
     }
 
     private Map<String, String> row(List<String> headers, List<String> values) {
