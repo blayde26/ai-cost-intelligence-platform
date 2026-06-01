@@ -17,6 +17,9 @@ management:
 acip:
   work-tracking:
     provider: ${WORK_TRACKING_PROVIDER:mock}
+  source-control:
+    provider: ${SOURCE_CONTROL_PROVIDER:mock}
+    organization: ${SOURCE_CONTROL_ORGANIZATION:}
   demo-data:
     enabled: ${DEMO_DATA_ENABLED:false}
     usage-event-count: ${DEMO_USAGE_EVENT_COUNT:2000}

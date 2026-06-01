@@ -137,15 +137,84 @@ class OutcomeAnalyticsServiceTest {
         ));
 
         assertThat(outcomeAnalyticsService.repositorySnapshots())
-                .singleElement()
-                .satisfies(snapshot -> {
+                .anySatisfy(snapshot -> {
                     assertThat(snapshot.repository()).isEqualTo("ai-cost-intelligence-platform");
+                    assertThat(snapshot.owner()).isEqualTo("platform-engineering");
+                    assertThat(snapshot.teamKey()).isEqualTo("platform");
                     assertThat(snapshot.aiSpend()).isEqualByComparingTo("2.00");
                     assertThat(snapshot.aiRequestCount()).isEqualTo(1);
                     assertThat(snapshot.totalTokens()).isEqualTo(15);
                     assertThat(snapshot.attributionCoveragePercent()).isEqualTo(100.0);
-                    assertThat(snapshot.prCount()).isNull();
+                    assertThat(snapshot.prCount()).isEqualTo(18);
+                    assertThat(snapshot.commitCount()).isEqualTo(126);
+                    assertThat(snapshot.reviewCount()).isEqualTo(44);
+                    assertThat(snapshot.commentCount()).isEqualTo(137);
+                    assertThat(snapshot.averageMergeTimeHours()).isEqualTo(14.5);
+                    assertThat(snapshot.outcomeDataStatus()).isEqualTo(OutcomeDataStatus.AVAILABLE);
+                });
+    }
+
+    @Test
+    void includesMockSourceControlRepositoriesWithoutUsage() {
+        assertThat(outcomeAnalyticsService.repositorySnapshots())
+                .anySatisfy(snapshot -> {
+                    assertThat(snapshot.repository()).isEqualTo("checkout-service");
+                    assertThat(snapshot.owner()).isEqualTo("payments");
+                    assertThat(snapshot.teamKey()).isEqualTo("payments");
+                    assertThat(snapshot.aiSpend()).isEqualByComparingTo("0");
+                    assertThat(snapshot.aiRequestCount()).isZero();
+                    assertThat(snapshot.prCount()).isEqualTo(24);
+                    assertThat(snapshot.commitCount()).isEqualTo(188);
                     assertThat(snapshot.outcomeDataStatus()).isEqualTo(OutcomeDataStatus.PARTIAL);
+                });
+    }
+
+    @Test
+    void buildsCorrelationSignalsWithoutClaimingCausation() {
+        epicRepository.upsert(new WorkItem("PAY-1000", WorkItemType.EPIC, "Checkout", "In Progress", "payments", null, "UNKNOWN"));
+        storyRepository.upsert(new WorkItem("PAY-1001", WorkItemType.STORY, "Tax", "Done", "payments", "PAY-1000", "CAPITALIZED"));
+        usageEventRepository.save(new UsageEvent(
+                UUID.randomUUID(),
+                "OLLAMA",
+                "llama3.2",
+                "PAY-1001",
+                "PAY-1000",
+                "payments",
+                "brian",
+                10,
+                5,
+                15,
+                new BigDecimal("3.50"),
+                20,
+                OffsetDateTime.of(2026, 5, 31, 12, 0, 0, 0, ZoneOffset.UTC),
+                "test",
+                "CAPITALIZED",
+                "SUCCEEDED",
+                AttributionStatus.VALID,
+                "c".repeat(64),
+                "checkout-service",
+                "feature/PAY-1001-tax",
+                "abc123",
+                null,
+                null,
+                false,
+                null,
+                null
+        ));
+
+        OutcomeCorrelationReport report = outcomeAnalyticsService.correlations();
+
+        assertThat(report.totalAiSpend()).isEqualByComparingTo("3.50");
+        assertThat(report.aiActiveTeamCount()).isGreaterThanOrEqualTo(1);
+        assertThat(report.repositoriesWithOutcomeMetrics()).isGreaterThanOrEqualTo(1);
+        assertThat(report.averageStoryCompletionRateForAiActiveTeams()).isEqualTo(100.0);
+        assertThat(report.averageMergeTimeHoursForAiActiveRepositories()).isEqualTo(10.2);
+        assertThat(report.interpretation()).contains("not causal claims");
+        assertThat(report.signals())
+                .anySatisfy(signal -> {
+                    assertThat(signal.subjectType()).isEqualTo("REPOSITORY");
+                    assertThat(signal.subjectKey()).isEqualTo("checkout-service");
+                    assertThat(signal.outcomeMetric()).isEqualTo("averageMergeTimeHours");
                 });
     }
 }

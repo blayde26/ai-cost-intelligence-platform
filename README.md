@@ -58,7 +58,9 @@ ACIP is expanding from AI cost attribution toward AI investment intelligence. Th
 
 Near-term work prioritizes low-friction adoption: setup health, CSV import, and import-first evaluation workflows before deeper outcome analytics.
 
-The first outcome analytics slice adds read-only team and repository snapshots. These reports are intentionally framed as correlation signals, not proof that AI caused delivery movement.
+The first outcome analytics slices add read-only team and repository snapshots. These reports are intentionally framed as correlation signals, not proof that AI caused delivery movement.
+
+Repository outcome metrics are provider-backed. Local development defaults to mock GitHub-style repository metrics so ACIP can show PR, commit, review, and merge-time signals without source-control credentials. A future GitHub provider can replace the mock provider through configuration without changing the reporting API.
 
 ## Sprint 5 Scope
 
@@ -155,6 +157,8 @@ Sprint 2 adds these configuration values:
 | Variable | Default |
 | --- | --- |
 | `WORK_TRACKING_PROVIDER` | `mock` |
+| `SOURCE_CONTROL_PROVIDER` | `mock` |
+| `SOURCE_CONTROL_ORGANIZATION` | empty |
 | `DEMO_DATA_ENABLED` | `false` |
 | `DEMO_USAGE_EVENT_COUNT` | `2000` |
 | `JIRA_BASE_URL` | empty |
@@ -275,7 +279,7 @@ The import response includes `importedCount`, `skippedCount`, and row-level erro
 
 `GET /api/v1/setup/health`
 
-Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, and planned outcome analytics.
+Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, source-control outcome provider, and planned outcome analytics.
 
 The dashboard **Setup** tab uses this endpoint and includes a CSV import panel for pilot users.
 
@@ -287,14 +291,17 @@ The dashboard **Setup** tab uses this endpoint and includes a CSV import panel f
 
 `GET /api/v1/analytics/repositories`
 
+`GET /api/v1/analytics/correlations`
+
 Returns initial outcome analytics snapshots from persisted usage and work tracking data:
 
 - AI spend by team.
 - Story counts, completion rate, cancellation rate, and work mix by team.
-- AI spend, token volume, and attribution coverage by repository.
-- GitHub-style PR metrics as unavailable until a GitHub outcome provider is connected.
+- AI spend, token volume, attribution coverage, PR counts, commit counts, review counts, comments, and merge/review timing by repository.
+- Mock GitHub-style repository metrics in local mode so outcome dashboards are useful before live source-control integration.
+- Correlation signals that compare AI spend with team completion rates and repository delivery metrics without claiming causation.
 
-The dashboard **Outcomes** tab displays these snapshots as correlation-oriented signals.
+The dashboard **Outcomes** tab displays these snapshots and correlation-oriented diagnostics.
 
 ### Jira Sync
 

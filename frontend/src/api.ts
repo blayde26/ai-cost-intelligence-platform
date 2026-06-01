@@ -149,6 +149,8 @@ export type TeamAnalyticsSnapshot = {
 
 export type RepositoryAnalyticsSnapshot = {
   repository: string;
+  owner: string | null;
+  teamKey: string | null;
   aiSpend: number;
   aiRequestCount: number;
   totalTokens: number;
@@ -156,9 +158,35 @@ export type RepositoryAnalyticsSnapshot = {
   unattributedEventCount: number;
   attributionCoveragePercent: number;
   prCount: number | null;
+  commitCount: number | null;
+  reviewCount: number | null;
+  commentCount: number | null;
   averageMergeTimeHours: number | null;
   averageReviewTimeHours: number | null;
   outcomeDataStatus: string;
+  interpretation: string;
+};
+
+export type OutcomeCorrelationSignal = {
+  subjectType: string;
+  subjectKey: string;
+  aiSpend: number;
+  outcomeMetric: string;
+  outcomeValue: number;
+  signal: string;
+  interpretation: string;
+};
+
+export type OutcomeCorrelationReport = {
+  totalAiSpend: number;
+  teamCount: number;
+  aiActiveTeamCount: number;
+  repositoryCount: number;
+  aiActiveRepositoryCount: number;
+  repositoriesWithOutcomeMetrics: number;
+  averageStoryCompletionRateForAiActiveTeams: number;
+  averageMergeTimeHoursForAiActiveRepositories: number | null;
+  signals: OutcomeCorrelationSignal[];
   interpretation: string;
 };
 
@@ -221,6 +249,7 @@ export const api = {
   importUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv', csv, 'text/csv'),
   teamEffectiveness: () => getJson<TeamAnalyticsSnapshot[]>('/api/v1/analytics/team-effectiveness'),
   repositoryAnalytics: () => getJson<RepositoryAnalyticsSnapshot[]>('/api/v1/analytics/repositories'),
+  outcomeCorrelations: () => getJson<OutcomeCorrelationReport>('/api/v1/analytics/correlations'),
   usageEvents: () => getJson<UsageEvent[]>('/api/v1/usage/events?limit=100'),
   usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`),
   correctAttribution: (id: string, request: AttributionCorrectionRequest) =>

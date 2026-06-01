@@ -1,5 +1,7 @@
 package com.acip.outcomes;
 
+import com.acip.sourcecontrol.RepositoryOutcomeMetrics;
+import com.acip.sourcecontrol.RepositoryOutcomeProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -7,15 +9,20 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class PersistedOutcomeProvider implements OutcomeProvider {
 
     private final JdbcTemplate jdbcTemplate;
+    private final RepositoryOutcomeProvider repositoryOutcomeProvider;
 
-    public PersistedOutcomeProvider(JdbcTemplate jdbcTemplate) {
+    public PersistedOutcomeProvider(JdbcTemplate jdbcTemplate, RepositoryOutcomeProvider repositoryOutcomeProvider) {
         this.jdbcTemplate = jdbcTemplate;
+        this.repositoryOutcomeProvider = repositoryOutcomeProvider;
     }
 
     @Override
@@ -86,7 +93,20 @@ public class PersistedOutcomeProvider implements OutcomeProvider {
                 GROUP BY COALESCE(NULLIF(repository, ''), 'Unassigned')
                 ORDER BY ai_spend DESC, ai_request_count DESC, repository ASC
                 """;
-        return jdbcTemplate.query(sql, this::mapRepositorySnapshot);
+        Map<String, RepositoryAggregate> repositories = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, this::mapRepositoryUsage).forEach(usage -> repositories
+                .computeIfAbsent(usage.repository(), RepositoryAggregate::new)
+                .applyUsage(usage));
+        repositoryOutcomeProvider.repositoryMetrics().forEach(metrics -> repositories
+                .computeIfAbsent(metrics.repository(), RepositoryAggregate::new)
+                .applyOutcome(metrics));
+        return repositories.values().stream()
+                .map(this::toRepositorySnapshot)
+                .sorted(Comparator
+                        .comparing(RepositoryAnalyticsSnapshot::aiSpend).reversed()
+                        .thenComparing(snapshot -> snapshot.prCount() == null ? 0L : snapshot.prCount(), Comparator.reverseOrder())
+                        .thenComparing(RepositoryAnalyticsSnapshot::repository))
+                .toList();
     }
 
     private TeamAnalyticsSnapshot mapTeamSnapshot(ResultSet rs, int rowNum) throws SQLException {
@@ -117,26 +137,64 @@ public class PersistedOutcomeProvider implements OutcomeProvider {
         );
     }
 
-    private RepositoryAnalyticsSnapshot mapRepositorySnapshot(ResultSet rs, int rowNum) throws SQLException {
-        long requestCount = rs.getLong("ai_request_count");
-        long attributed = rs.getLong("attributed_event_count");
-        long unattributed = rs.getLong("unattributed_event_count");
-        return new RepositoryAnalyticsSnapshot(
+    private RepositoryUsageMetrics mapRepositoryUsage(ResultSet rs, int rowNum) throws SQLException {
+        return new RepositoryUsageMetrics(
                 rs.getString("repository"),
                 nonNull(rs.getBigDecimal("ai_spend")),
-                requestCount,
+                rs.getLong("ai_request_count"),
                 rs.getLong("total_tokens"),
+                rs.getLong("attributed_event_count"),
+                rs.getLong("unattributed_event_count")
+        );
+    }
+
+    private RepositoryAnalyticsSnapshot toRepositorySnapshot(RepositoryAggregate aggregate) {
+        long attributed = aggregate.attributedEventCount;
+        long unattributed = aggregate.unattributedEventCount;
+        boolean hasUsage = aggregate.aiRequestCount > 0;
+        boolean hasOutcome = aggregate.prCount != null || aggregate.commitCount != null;
+        return new RepositoryAnalyticsSnapshot(
+                aggregate.repository,
+                aggregate.owner,
+                aggregate.teamKey,
+                aggregate.aiSpend,
+                aggregate.aiRequestCount,
+                aggregate.totalTokens,
                 attributed,
                 unattributed,
                 percent(attributed, attributed + unattributed),
-                null,
-                null,
-                null,
-                requestCount > 0 ? OutcomeDataStatus.PARTIAL : OutcomeDataStatus.UNAVAILABLE,
-                requestCount > 0
-                        ? "Repository spend is available from usage metadata. PR throughput and review timing require a GitHub outcome provider."
-                        : "No usage metadata is available for this repository."
+                aggregate.prCount,
+                aggregate.commitCount,
+                aggregate.reviewCount,
+                aggregate.commentCount,
+                aggregate.averageMergeTimeHours,
+                aggregate.averageReviewTimeHours,
+                repositoryStatus(hasUsage, hasOutcome),
+                repositoryInterpretation(hasUsage, hasOutcome)
         );
+    }
+
+    private OutcomeDataStatus repositoryStatus(boolean hasUsage, boolean hasOutcome) {
+        if (hasUsage && hasOutcome) {
+            return OutcomeDataStatus.AVAILABLE;
+        }
+        if (hasUsage || hasOutcome) {
+            return OutcomeDataStatus.PARTIAL;
+        }
+        return OutcomeDataStatus.UNAVAILABLE;
+    }
+
+    private String repositoryInterpretation(boolean hasUsage, boolean hasOutcome) {
+        if (hasUsage && hasOutcome) {
+            return "AI spend and source-control outcome data are both available. Treat movement as correlation, not causation.";
+        }
+        if (hasUsage) {
+            return "Repository spend is available from usage metadata. Source-control outcome metrics are not available for this repository.";
+        }
+        if (hasOutcome) {
+            return "Source-control outcome data is available, but no AI spend is attached to this repository yet.";
+        }
+        return "No usage or source-control outcome data is available for this repository.";
     }
 
     private BigDecimal nonNull(BigDecimal value) {
@@ -164,5 +222,55 @@ public class PersistedOutcomeProvider implements OutcomeProvider {
             return "Story outcome data is available, but no AI spend is attached to this team.";
         }
         return "AI spend and story outcome data are both available. Treat movement as correlation, not causation.";
+    }
+
+    private record RepositoryUsageMetrics(
+            String repository,
+            BigDecimal aiSpend,
+            long aiRequestCount,
+            long totalTokens,
+            long attributedEventCount,
+            long unattributedEventCount
+    ) {
+    }
+
+    private static class RepositoryAggregate {
+        private final String repository;
+        private String owner;
+        private String teamKey;
+        private BigDecimal aiSpend = BigDecimal.ZERO;
+        private long aiRequestCount;
+        private long totalTokens;
+        private long attributedEventCount;
+        private long unattributedEventCount;
+        private Long prCount;
+        private Long commitCount;
+        private Long reviewCount;
+        private Long commentCount;
+        private Double averageMergeTimeHours;
+        private Double averageReviewTimeHours;
+
+        private RepositoryAggregate(String repository) {
+            this.repository = repository;
+        }
+
+        private void applyUsage(RepositoryUsageMetrics usage) {
+            this.aiSpend = usage.aiSpend();
+            this.aiRequestCount = usage.aiRequestCount();
+            this.totalTokens = usage.totalTokens();
+            this.attributedEventCount = usage.attributedEventCount();
+            this.unattributedEventCount = usage.unattributedEventCount();
+        }
+
+        private void applyOutcome(RepositoryOutcomeMetrics metrics) {
+            this.owner = metrics.owner();
+            this.teamKey = metrics.teamKey();
+            this.prCount = metrics.prCount();
+            this.commitCount = metrics.commitCount();
+            this.reviewCount = metrics.reviewCount();
+            this.commentCount = metrics.commentCount();
+            this.averageMergeTimeHours = metrics.averageMergeTimeHours();
+            this.averageReviewTimeHours = metrics.averageReviewTimeHours();
+        }
     }
 }
