@@ -128,7 +128,11 @@ public class SetupHealthService {
             return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.READY, "Mock source-control outcome provider is active with " + repositoryCount + " repository metric snapshots.");
         }
         if ("github".equalsIgnoreCase(provider)) {
-            return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.WARNING, "GitHub source-control provider is selected, but live GitHub outcome sync is not implemented yet.");
+            if (!sourceControlProperties.isGitHubConfigured()) {
+                return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.WARNING, "GitHub source-control provider is selected, but GITHUB_TOKEN or GITHUB_REPOSITORIES is missing.");
+            }
+            int repositoryCount = sourceControlProperties.configuredRepositories().size();
+            return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.READY, "GitHub source-control provider is configured for " + repositoryCount + " repositories.");
         }
         return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.WARNING, "Unknown source-control provider: " + provider + ".");
     }

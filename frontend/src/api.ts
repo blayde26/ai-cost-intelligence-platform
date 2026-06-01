@@ -117,6 +117,39 @@ export type SetupHealthReport = {
   components: SetupHealthComponent[];
 };
 
+export type SourceControlRepositoryDiagnostic = {
+  repository: string;
+  owner: string | null;
+  teamKey: string | null;
+  configured: boolean;
+  metricsAvailable: boolean;
+  prCount: number | null;
+  commitCount: number | null;
+  reviewCount: number | null;
+  commentCount: number | null;
+  averageMergeTimeHours: number | null;
+  averageReviewTimeHours: number | null;
+};
+
+export type SourceControlMetricsCacheState = {
+  enabled: boolean;
+  populated: boolean;
+  lastLoadedAt: string | null;
+  expiresAt: string | null;
+  ttlSeconds: number;
+};
+
+export type SourceControlDiagnosticsReport = {
+  provider: string;
+  configured: boolean;
+  tokenPresent: boolean;
+  configuredRepositoryCount: number;
+  metricsAvailableCount: number;
+  cache: SourceControlMetricsCacheState;
+  repositories: SourceControlRepositoryDiagnostic[];
+  message: string;
+};
+
 export type UsageImportError = {
   rowNumber: number;
   message: string;
@@ -246,6 +279,7 @@ export const api = {
   spendByEpic: () => getJson<SpendByEpic[]>('/api/v1/reports/spend/by-epic'),
   spendByTeam: () => getJson<SpendByTeam[]>('/api/v1/reports/spend/by-team'),
   setupHealth: () => getJson<SetupHealthReport>('/api/v1/setup/health'),
+  sourceControlDiagnostics: () => getJson<SourceControlDiagnosticsReport>('/api/v1/source-control/diagnostics'),
   importUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv', csv, 'text/csv'),
   teamEffectiveness: () => getJson<TeamAnalyticsSnapshot[]>('/api/v1/analytics/team-effectiveness'),
   repositoryAnalytics: () => getJson<RepositoryAnalyticsSnapshot[]>('/api/v1/analytics/repositories'),

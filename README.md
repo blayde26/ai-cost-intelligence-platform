@@ -159,6 +159,10 @@ Sprint 2 adds these configuration values:
 | `WORK_TRACKING_PROVIDER` | `mock` |
 | `SOURCE_CONTROL_PROVIDER` | `mock` |
 | `SOURCE_CONTROL_ORGANIZATION` | empty |
+| `GITHUB_API_BASE_URL` | `https://api.github.com` |
+| `GITHUB_TOKEN` | empty |
+| `GITHUB_REPOSITORIES` | empty |
+| `SOURCE_CONTROL_CACHE_TTL` | `5m` |
 | `DEMO_DATA_ENABLED` | `false` |
 | `DEMO_USAGE_EVENT_COUNT` | `2000` |
 | `JIRA_BASE_URL` | empty |
@@ -168,7 +172,17 @@ Sprint 2 adds these configuration values:
 
 Docker Compose enables demo data by default, using the mock work tracking provider.
 
-Jira credentials should be supplied through environment variables or a local secret manager. Do not commit Jira API tokens to the repository.
+Jira and GitHub credentials should be supplied through environment variables or a local secret manager. Do not commit API tokens to the repository.
+
+For live GitHub repository outcome metrics, set:
+
+```powershell
+$env:SOURCE_CONTROL_PROVIDER = "github"
+$env:GITHUB_TOKEN = "github_pat_or_token"
+$env:GITHUB_REPOSITORIES = "owner/repo:team-key,owner/another-repo:platform"
+```
+
+`GITHUB_REPOSITORIES` accepts comma-separated `owner/repository` values with an optional `:teamKey` suffix. When GitHub is not configured, ACIP continues to run and reports source-control readiness as a warning only if the GitHub provider is explicitly selected.
 
 ## API
 
@@ -281,6 +295,10 @@ The import response includes `importedCount`, `skippedCount`, and row-level erro
 
 Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, source-control outcome provider, and planned outcome analytics.
 
+`GET /api/v1/source-control/diagnostics`
+
+Returns non-secret source-control diagnostics for the selected provider, including configured repository count, whether a token is present, metric snapshot count, cache state, and per-repository PR/commit/review timing metrics. Tokens are never returned by this endpoint.
+
 The dashboard **Setup** tab uses this endpoint and includes a CSV import panel for pilot users.
 
 ### Outcome Analytics
@@ -299,6 +317,7 @@ Returns initial outcome analytics snapshots from persisted usage and work tracki
 - Story counts, completion rate, cancellation rate, and work mix by team.
 - AI spend, token volume, attribution coverage, PR counts, commit counts, review counts, comments, and merge/review timing by repository.
 - Mock GitHub-style repository metrics in local mode so outcome dashboards are useful before live source-control integration.
+- Optional live GitHub repository metrics when `SOURCE_CONTROL_PROVIDER=github`, `GITHUB_TOKEN`, and `GITHUB_REPOSITORIES` are configured.
 - Correlation signals that compare AI spend with team completion rates and repository delivery metrics without claiming causation.
 
 The dashboard **Outcomes** tab displays these snapshots and correlation-oriented diagnostics.

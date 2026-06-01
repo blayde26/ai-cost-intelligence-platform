@@ -2,7 +2,7 @@ package com.acip.setup;
 
 import com.acip.jira.JiraProperties;
 import com.acip.proxy.OpenAiProperties;
-import com.acip.sourcecontrol.ConfiguredRepositoryOutcomeProvider;
+import com.acip.sourcecontrol.RepositoryOutcomeProvider;
 import com.acip.sourcecontrol.SourceControlProperties;
 import com.acip.worktracking.WorkTrackingProperties;
 import org.junit.jupiter.api.Test;
@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 class SetupHealthServiceTest {
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    private final RepositoryOutcomeProvider repositoryOutcomeProvider = mock(RepositoryOutcomeProvider.class);
 
     @Test
     void reportsReadyLocalSetupWithMockWorkTracking() {
@@ -26,13 +27,14 @@ class SetupHealthServiceTest {
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM epics", Long.class)).thenReturn(5L);
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'DEMO_DATA' OR environment = 'demo'", Long.class)).thenReturn(2000L);
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'CSV_IMPORT'", Long.class)).thenReturn(2L);
+        when(repositoryOutcomeProvider.repositoryMetrics()).thenReturn(java.util.List.of());
         SetupHealthService service = new SetupHealthService(
                 jdbcTemplate,
                 new WorkTrackingProperties("mock"),
                 new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
                 new OpenAiProperties("MOCK_LLM", "", false, "http://localhost:8090/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
-                new SourceControlProperties("mock", ""),
-                new ConfiguredRepositoryOutcomeProvider(new SourceControlProperties("mock", ""))
+                sourceControlProperties("mock", "", ""),
+                repositoryOutcomeProvider
         );
 
         SetupHealthReport report = service.health();
@@ -61,8 +63,8 @@ class SetupHealthServiceTest {
                 new WorkTrackingProperties("jira"),
                 new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
                 new OpenAiProperties("OPENAI", "", true, "https://api.openai.com/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
-                new SourceControlProperties("mock", ""),
-                new ConfiguredRepositoryOutcomeProvider(new SourceControlProperties("mock", ""))
+                sourceControlProperties("mock", "", ""),
+                repositoryOutcomeProvider
         );
 
         SetupHealthReport report = service.health();
@@ -72,5 +74,61 @@ class SetupHealthServiceTest {
             assertThat(component.key()).isEqualTo("llmProxy");
             assertThat(component.status()).isEqualTo(SetupHealthStatus.WARNING);
         });
+    }
+
+    @Test
+    void reportsReadyGitHubSourceControlWhenConfigured() {
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events", Long.class)).thenReturn(0L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM provider_pricing", Long.class)).thenReturn(3L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM stories", Long.class)).thenReturn(20L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM epics", Long.class)).thenReturn(5L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'DEMO_DATA' OR environment = 'demo'", Long.class)).thenReturn(0L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'CSV_IMPORT'", Long.class)).thenReturn(0L);
+        SetupHealthService service = new SetupHealthService(
+                jdbcTemplate,
+                new WorkTrackingProperties("mock"),
+                new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
+                new OpenAiProperties("MOCK_LLM", "", false, "http://localhost:8090/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
+                sourceControlProperties("github", "token", "acme/api:platform,acme/web:payments"),
+                repositoryOutcomeProvider
+        );
+
+        SetupHealthReport report = service.health();
+
+        assertThat(report.components()).anySatisfy(component -> {
+            assertThat(component.key()).isEqualTo("sourceControl");
+            assertThat(component.status()).isEqualTo(SetupHealthStatus.READY);
+            assertThat(component.message()).contains("2 repositories");
+        });
+    }
+
+    @Test
+    void warnsWhenGitHubSourceControlIsMissingCredentials() {
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events", Long.class)).thenReturn(0L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM provider_pricing", Long.class)).thenReturn(3L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM stories", Long.class)).thenReturn(20L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM epics", Long.class)).thenReturn(5L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'DEMO_DATA' OR environment = 'demo'", Long.class)).thenReturn(0L);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ai_usage_events WHERE capture_source = 'CSV_IMPORT'", Long.class)).thenReturn(0L);
+        SetupHealthService service = new SetupHealthService(
+                jdbcTemplate,
+                new WorkTrackingProperties("mock"),
+                new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
+                new OpenAiProperties("MOCK_LLM", "", false, "http://localhost:8090/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
+                sourceControlProperties("github", "", "acme/api:platform"),
+                repositoryOutcomeProvider
+        );
+
+        SetupHealthReport report = service.health();
+
+        assertThat(report.overallStatus()).isEqualTo(SetupHealthStatus.WARNING);
+        assertThat(report.components()).anySatisfy(component -> {
+            assertThat(component.key()).isEqualTo("sourceControl");
+            assertThat(component.status()).isEqualTo(SetupHealthStatus.WARNING);
+        });
+    }
+
+    private SourceControlProperties sourceControlProperties(String provider, String token, String repositories) {
+        return new SourceControlProperties(provider, "", "https://api.github.com", token, repositories, Duration.ofSeconds(5), Duration.ofSeconds(20), Duration.ofMinutes(5));
     }
 }
