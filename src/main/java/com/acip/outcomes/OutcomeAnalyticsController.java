@@ -28,4 +28,9 @@ public class OutcomeAnalyticsController {
     public List<RepositoryAnalyticsSnapshot> repositories() {
         return outcomeAnalyticsService.repositorySnapshots();
     }
+
+    @GetMapping("/api/v1/analytics/correlations")
+    public OutcomeCorrelationReport correlations() {
+        return outcomeAnalyticsService.correlations();
+    }
 }

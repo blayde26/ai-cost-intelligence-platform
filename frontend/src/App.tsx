@@ -40,6 +40,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AttributionCorrectionRequest,
   AttributionCoverage,
+  OutcomeCorrelationReport,
   PotentialWaste,
   RepositoryAnalyticsSnapshot,
   SetupHealthReport,
@@ -69,6 +70,7 @@ type DashboardData = {
   setupHealth: SetupHealthReport;
   teamOutcomes: TeamAnalyticsSnapshot[];
   repositoryOutcomes: RepositoryAnalyticsSnapshot[];
+  outcomeCorrelations: OutcomeCorrelationReport;
 };
 
 const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
@@ -136,7 +138,7 @@ export default function App() {
     }
     setError(null);
     try {
-      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes] = await Promise.all([
+      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes, outcomeCorrelations] = await Promise.all([
         api.overview(),
         api.coverage(),
         api.allocation(),
@@ -147,9 +149,10 @@ export default function App() {
         api.usageEvents(),
         api.setupHealth(),
         api.teamEffectiveness(),
-        api.repositoryAnalytics()
+        api.repositoryAnalytics(),
+        api.outcomeCorrelations()
       ]);
-      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes });
+      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes, outcomeCorrelations });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to load dashboard data');
     } finally {
@@ -228,7 +231,7 @@ export default function App() {
               />
             )}
             {route.view === 'outcomes' && (
-              <OutcomeAnalyticsView teams={data.teamOutcomes} repositories={data.repositoryOutcomes} />
+              <OutcomeAnalyticsView teams={data.teamOutcomes} repositories={data.repositoryOutcomes} correlations={data.outcomeCorrelations} />
             )}
             {route.view === 'setup' && (
               <SetupView health={data.setupHealth} onImported={() => void loadDashboard(false)} />
@@ -662,10 +665,12 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
 
 function OutcomeAnalyticsView({
   teams,
-  repositories
+  repositories,
+  correlations
 }: {
   teams: TeamAnalyticsSnapshot[];
   repositories: RepositoryAnalyticsSnapshot[];
+  correlations: OutcomeCorrelationReport;
 }) {
   const topTeam = teams[0];
   const topRepository = repositories[0];
@@ -677,6 +682,48 @@ function OutcomeAnalyticsView({
         <MetricCard label="Top repository" value={topRepository?.repository ?? 'None'} detail={topRepository ? money(topRepository.aiSpend) : undefined} />
         <MetricCard label="Repository coverage" value={topRepository ? percent(topRepository.attributionCoveragePercent) : percent(0)} />
       </Box>
+      <ReportPanel title="Correlation Signals">
+        <Stack spacing={1.5}>
+          <Typography variant="body2" color="text.secondary">{correlations.interpretation}</Typography>
+          <Box className="metric-grid">
+            <MetricCard label="AI-active teams" value={`${integer(correlations.aiActiveTeamCount)} / ${integer(correlations.teamCount)}`} />
+            <MetricCard label="AI-active repositories" value={`${integer(correlations.aiActiveRepositoryCount)} / ${integer(correlations.repositoryCount)}`} />
+            <MetricCard label="Avg completion" value={percent(correlations.averageStoryCompletionRateForAiActiveTeams)} detail="AI-active teams" />
+            <MetricCard label="Avg merge time" value={nullableHours(correlations.averageMergeTimeHoursForAiActiveRepositories)} detail="AI-active repositories" />
+          </Box>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Subject</TableCell>
+                  <TableCell align="right">AI Spend</TableCell>
+                  <TableCell>Metric</TableCell>
+                  <TableCell align="right">Value</TableCell>
+                  <TableCell>Signal</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {correlations.signals.map((signal) => (
+                  <TableRow key={`${signal.subjectType}-${signal.subjectKey}-${signal.outcomeMetric}`}>
+                    <TableCell>
+                      <Typography fontWeight={700}>{signal.subjectKey}</Typography>
+                      <Typography variant="caption" color="text.secondary">{signal.subjectType}</Typography>
+                    </TableCell>
+                    <TableCell align="right">{money(signal.aiSpend)}</TableCell>
+                    <TableCell>{signal.outcomeMetric.replace(/([A-Z])/g, ' $1')}</TableCell>
+                    <TableCell align="right">{formatSignalValue(signal.outcomeMetric, signal.outcomeValue)}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{signal.signal}</Typography>
+                      <Typography variant="caption" color="text.secondary">{signal.interpretation}</Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {correlations.signals.length === 0 && <EmptyState />}
+        </Stack>
+      </ReportPanel>
       <ReportPanel title="Team Effectiveness">
         <TableContainer>
           <Table size="small">
@@ -723,7 +770,10 @@ function OutcomeAnalyticsView({
                 <TableCell align="right">Requests</TableCell>
                 <TableCell align="right">Tokens</TableCell>
                 <TableCell align="right">Coverage</TableCell>
-                <TableCell align="right">PR Count</TableCell>
+                <TableCell align="right">PRs</TableCell>
+                <TableCell align="right">Commits</TableCell>
+                <TableCell align="right">Merge Time</TableCell>
+                <TableCell align="right">Review Time</TableCell>
                 <TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
@@ -732,13 +782,20 @@ function OutcomeAnalyticsView({
                 <TableRow key={repository.repository}>
                   <TableCell>
                     <Typography fontWeight={700}>{repository.repository}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {[repository.owner, repository.teamKey].filter(Boolean).join(' / ') || 'No source-control owner'}
+                    </Typography>
+                    <br />
                     <Typography variant="caption" color="text.secondary">{repository.interpretation}</Typography>
                   </TableCell>
                   <TableCell align="right">{money(repository.aiSpend)}</TableCell>
                   <TableCell align="right">{integer(repository.aiRequestCount)}</TableCell>
                   <TableCell align="right">{integer(repository.totalTokens)}</TableCell>
                   <TableCell align="right">{percent(repository.attributionCoveragePercent)}</TableCell>
-                  <TableCell align="right">{repository.prCount == null ? 'Unavailable' : integer(repository.prCount)}</TableCell>
+                  <TableCell align="right">{nullableCount(repository.prCount)}</TableCell>
+                  <TableCell align="right">{nullableCount(repository.commitCount)}</TableCell>
+                  <TableCell align="right">{nullableHours(repository.averageMergeTimeHours)}</TableCell>
+                  <TableCell align="right">{nullableHours(repository.averageReviewTimeHours)}</TableCell>
                   <TableCell><StatusChip value={repository.outcomeDataStatus} /></TableCell>
                 </TableRow>
               ))}
@@ -996,6 +1053,24 @@ function EmptyState() {
 
 function wasteTotal(waste: PotentialWaste) {
   return waste.cancelledStorySpend + waste.operationalSpend + waste.unknownAttributionSpend + waste.failedRequestSpend;
+}
+
+function nullableCount(value: number | null) {
+  return value == null ? 'Unavailable' : integer(value);
+}
+
+function nullableHours(value: number | null) {
+  return value == null ? 'Unavailable' : `${Number(value).toFixed(1)}h`;
+}
+
+function formatSignalValue(metric: string, value: number) {
+  if (metric.toLowerCase().includes('rate')) {
+    return percent(value);
+  }
+  if (metric.toLowerCase().includes('time')) {
+    return `${Number(value).toFixed(1)}h`;
+  }
+  return integer(value);
 }
 
 function emptyToNull(value: string) {

@@ -2,6 +2,8 @@ package com.acip.setup;
 
 import com.acip.jira.JiraProperties;
 import com.acip.proxy.OpenAiProperties;
+import com.acip.sourcecontrol.ConfiguredRepositoryOutcomeProvider;
+import com.acip.sourcecontrol.SourceControlProperties;
 import com.acip.worktracking.WorkTrackingProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,7 +30,9 @@ class SetupHealthServiceTest {
                 jdbcTemplate,
                 new WorkTrackingProperties("mock"),
                 new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
-                new OpenAiProperties("MOCK_LLM", "", false, "http://localhost:8090/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60))
+                new OpenAiProperties("MOCK_LLM", "", false, "http://localhost:8090/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
+                new SourceControlProperties("mock", ""),
+                new ConfiguredRepositoryOutcomeProvider(new SourceControlProperties("mock", ""))
         );
 
         SetupHealthReport report = service.health();
@@ -37,6 +41,10 @@ class SetupHealthServiceTest {
         assertThat(report.components()).anySatisfy(component -> {
             assertThat(component.key()).isEqualTo("csvImport");
             assertThat(component.message()).contains("2 imported");
+        });
+        assertThat(report.components()).anySatisfy(component -> {
+            assertThat(component.key()).isEqualTo("sourceControl");
+            assertThat(component.status()).isEqualTo(SetupHealthStatus.READY);
         });
     }
 
@@ -52,7 +60,9 @@ class SetupHealthServiceTest {
                 jdbcTemplate,
                 new WorkTrackingProperties("jira"),
                 new JiraProperties("", "", "", "project is not EMPTY", 50, "customfield_10014", "customfield_10015"),
-                new OpenAiProperties("OPENAI", "", true, "https://api.openai.com/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60))
+                new OpenAiProperties("OPENAI", "", true, "https://api.openai.com/v1/chat/completions", Duration.ofSeconds(5), Duration.ofSeconds(60)),
+                new SourceControlProperties("mock", ""),
+                new ConfiguredRepositoryOutcomeProvider(new SourceControlProperties("mock", ""))
         );
 
         SetupHealthReport report = service.health();

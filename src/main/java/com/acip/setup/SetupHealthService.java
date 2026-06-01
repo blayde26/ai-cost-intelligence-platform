@@ -2,6 +2,8 @@ package com.acip.setup;
 
 import com.acip.jira.JiraProperties;
 import com.acip.proxy.OpenAiProperties;
+import com.acip.sourcecontrol.RepositoryOutcomeProvider;
+import com.acip.sourcecontrol.SourceControlProperties;
 import com.acip.worktracking.WorkTrackingProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,17 +17,23 @@ public class SetupHealthService {
     private final WorkTrackingProperties workTrackingProperties;
     private final JiraProperties jiraProperties;
     private final OpenAiProperties openAiProperties;
+    private final SourceControlProperties sourceControlProperties;
+    private final RepositoryOutcomeProvider repositoryOutcomeProvider;
 
     public SetupHealthService(
             JdbcTemplate jdbcTemplate,
             WorkTrackingProperties workTrackingProperties,
             JiraProperties jiraProperties,
-            OpenAiProperties openAiProperties
+            OpenAiProperties openAiProperties,
+            SourceControlProperties sourceControlProperties,
+            RepositoryOutcomeProvider repositoryOutcomeProvider
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.workTrackingProperties = workTrackingProperties;
         this.jiraProperties = jiraProperties;
         this.openAiProperties = openAiProperties;
+        this.sourceControlProperties = sourceControlProperties;
+        this.repositoryOutcomeProvider = repositoryOutcomeProvider;
     }
 
     public SetupHealthReport health() {
@@ -37,6 +45,7 @@ public class SetupHealthService {
                 pricing(),
                 demoData(),
                 csvImport(),
+                sourceControl(),
                 outcomeAnalytics()
         );
         return new SetupHealthReport(overallStatus(components), components);
@@ -112,8 +121,20 @@ public class SetupHealthService {
         }
     }
 
+    private SetupHealthComponent sourceControl() {
+        String provider = sourceControlProperties.effectiveProvider();
+        if ("mock".equalsIgnoreCase(provider)) {
+            int repositoryCount = repositoryOutcomeProvider.repositoryMetrics().size();
+            return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.READY, "Mock source-control outcome provider is active with " + repositoryCount + " repository metric snapshots.");
+        }
+        if ("github".equalsIgnoreCase(provider)) {
+            return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.WARNING, "GitHub source-control provider is selected, but live GitHub outcome sync is not implemented yet.");
+        }
+        return new SetupHealthComponent("sourceControl", "Source Control", SetupHealthStatus.WARNING, "Unknown source-control provider: " + provider + ".");
+    }
+
     private SetupHealthComponent outcomeAnalytics() {
-        return new SetupHealthComponent("outcomeAnalytics", "Outcome Analytics", SetupHealthStatus.READY, "Initial team and repository outcome snapshots are available. GitHub PR metrics are still pending a GitHub outcome provider.");
+        return new SetupHealthComponent("outcomeAnalytics", "Outcome Analytics", SetupHealthStatus.READY, "Team, repository, and source-control outcome snapshots are available for correlation analysis.");
     }
 
     private SetupHealthStatus overallStatus(List<SetupHealthComponent> components) {
