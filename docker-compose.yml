@@ -38,6 +38,9 @@ services:
       OPENAI_API_KEY: ""
       OPENAI_CHAT_COMPLETIONS_URL: http://mock-llm:8080/v1/chat/completions
       DEMO_DATA_ENABLED: "true"
+      SOURCE_CONTROL_PROVIDER: ${SOURCE_CONTROL_PROVIDER:-mock}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_REPOSITORIES: ${GITHUB_REPOSITORIES:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -79,6 +82,9 @@ services:
       OPENAI_API_KEY: ""
       OPENAI_CHAT_COMPLETIONS_URL: http://ollama:11434/v1/chat/completions
       DEMO_DATA_ENABLED: "true"
+      SOURCE_CONTROL_PROVIDER: ${SOURCE_CONTROL_PROVIDER:-mock}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_REPOSITORIES: ${GITHUB_REPOSITORIES:-}
     ports:
       - "8081:8080"
     depends_on:

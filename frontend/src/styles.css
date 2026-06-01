@@ -125,6 +125,46 @@ body {
   padding: 12px 14px;
 }
 
+.health-row-button {
+  width: 100%;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.health-row-button:hover {
+  background: #f8fafc;
+  border-color: #9db7d2;
+}
+
+.health-row-button:focus-visible {
+  outline: 2px solid #2f6f9f;
+  outline-offset: 2px;
+}
+
+.health-row-active {
+  background: #f8fafc;
+  border-color: #2f6f9f;
+}
+
+.health-row-chevron {
+  align-items: center;
+  color: #5f6f82;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.setup-detail-grid {
+  border: 1px solid #e0e4ea;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
 .import-result-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -28,6 +28,8 @@ import {
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import GroupsIcon from '@mui/icons-material/Groups';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import InsightsIcon from '@mui/icons-material/Insights';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -43,6 +45,8 @@ import {
   OutcomeCorrelationReport,
   PotentialWaste,
   RepositoryAnalyticsSnapshot,
+  SourceControlDiagnosticsReport,
+  SetupHealthComponent,
   SetupHealthReport,
   SpendAllocation,
   SpendByEpic,
@@ -68,6 +72,7 @@ type DashboardData = {
   teams: SpendByTeam[];
   events: UsageEvent[];
   setupHealth: SetupHealthReport;
+  sourceControlDiagnostics: SourceControlDiagnosticsReport;
   teamOutcomes: TeamAnalyticsSnapshot[];
   repositoryOutcomes: RepositoryAnalyticsSnapshot[];
   outcomeCorrelations: OutcomeCorrelationReport;
@@ -138,7 +143,7 @@ export default function App() {
     }
     setError(null);
     try {
-      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes, outcomeCorrelations] = await Promise.all([
+      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, sourceControlDiagnostics, teamOutcomes, repositoryOutcomes, outcomeCorrelations] = await Promise.all([
         api.overview(),
         api.coverage(),
         api.allocation(),
@@ -148,11 +153,12 @@ export default function App() {
         api.spendByTeam(),
         api.usageEvents(),
         api.setupHealth(),
+        api.sourceControlDiagnostics(),
         api.teamEffectiveness(),
         api.repositoryAnalytics(),
         api.outcomeCorrelations()
       ]);
-      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes, outcomeCorrelations });
+      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, sourceControlDiagnostics, teamOutcomes, repositoryOutcomes, outcomeCorrelations });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to load dashboard data');
     } finally {
@@ -234,7 +240,7 @@ export default function App() {
               <OutcomeAnalyticsView teams={data.teamOutcomes} repositories={data.repositoryOutcomes} correlations={data.outcomeCorrelations} />
             )}
             {route.view === 'setup' && (
-              <SetupView health={data.setupHealth} onImported={() => void loadDashboard(false)} />
+              <SetupView health={data.setupHealth} sourceControl={data.sourceControlDiagnostics} onImported={() => void loadDashboard(false)} />
             )}
           </>
         )}
@@ -534,7 +540,23 @@ function UsageEventTable({ events }: { events: UsageEvent[] }) {
   );
 }
 
-function SetupView({ health, onImported }: { health: SetupHealthReport; onImported: () => void }) {
+function SetupView({
+  health,
+  sourceControl,
+  onImported
+}: {
+  health: SetupHealthReport;
+  sourceControl: SourceControlDiagnosticsReport;
+  onImported: () => void;
+}) {
+  const [activeDetail, setActiveDetail] = useState<string | null>(null);
+
+  function toggleDetail(componentKey: string) {
+    setActiveDetail((current) => (current === componentKey ? null : componentKey));
+  }
+
+  const activeComponent = health.components.find((component) => component.key === activeDetail) ?? null;
+
   return (
     <Stack spacing={2.5}>
       <Box className="metric-grid">
@@ -546,20 +568,198 @@ function SetupView({ health, onImported }: { health: SetupHealthReport; onImport
       <Box className="two-column">
         <ReportPanel title="Integration Health">
           <Stack spacing={1.25}>
-            {health.components.map((component) => (
-              <Box key={component.key} className="health-row">
-                <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
-                  <Typography fontWeight={750}>{component.label}</Typography>
-                  <StatusChip value={component.status} />
-                </Stack>
-                <Typography variant="body2" color="text.secondary">{component.message}</Typography>
-              </Box>
-            ))}
+            {health.components.map((component) => {
+              return (
+                <HealthRow
+                  key={component.key}
+                  component={component}
+                  active={activeDetail === component.key}
+                  onClick={setupDetailAvailable(component.key) ? () => toggleDetail(component.key) : undefined}
+                />
+              );
+            })}
           </Stack>
         </ReportPanel>
         <CsvImportPanel onImported={onImported} />
       </Box>
+      {activeComponent && (
+        <SetupIntegrationDetail component={activeComponent} sourceControl={sourceControl} />
+      )}
     </Stack>
+  );
+}
+
+function HealthRow({
+  component,
+  active,
+  onClick
+}: {
+  component: SetupHealthComponent;
+  active: boolean;
+  onClick?: () => void;
+}) {
+  const rowContent = (
+    <>
+      <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
+        <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+          <Typography fontWeight={750}>{component.label}</Typography>
+          <StatusChip value={component.status} />
+        </Stack>
+        {onClick && (
+          <Box className="health-row-chevron" aria-hidden="true">
+            {active ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
+          </Box>
+        )}
+      </Stack>
+      <Typography variant="body2" color="text.secondary">{component.message}</Typography>
+    </>
+  );
+
+  if (!onClick) {
+    return <Box className="health-row">{rowContent}</Box>;
+  }
+
+  return (
+    <Box
+      role="button"
+      tabIndex={0}
+      className={`health-row health-row-button${active ? ' health-row-active' : ''}`}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      aria-expanded={active}
+    >
+      {rowContent}
+    </Box>
+  );
+}
+
+function setupDetailAvailable(componentKey: string) {
+  return componentKey === 'sourceControl' || componentKey === 'jira' || componentKey === 'llmProxy';
+}
+
+function SetupIntegrationDetail({
+  component,
+  sourceControl
+}: {
+  component: SetupHealthComponent;
+  sourceControl: SourceControlDiagnosticsReport;
+}) {
+  if (component.key === 'sourceControl') {
+    return <SourceControlDiagnosticsPanel diagnostics={sourceControl} />;
+  }
+  if (component.key === 'jira') {
+    return <JiraSetupPanel component={component} />;
+  }
+  if (component.key === 'llmProxy') {
+    return <LlmProxySetupPanel component={component} />;
+  }
+  return null;
+}
+
+function JiraSetupPanel({ component }: { component: SetupHealthComponent }) {
+  return (
+    <ReportPanel title="Jira Setup">
+      <Stack spacing={1.5}>
+        <Typography variant="body2" color="text.secondary">{component.message}</Typography>
+        <Box className="metric-grid">
+          <MetricCard label="Provider" value="Jira Cloud" />
+          <MetricCard label="Required secret" value="JIRA API TOKEN" />
+          <MetricCard label="Sync endpoint" value="/api/v1/jira/sync" />
+          <MetricCard label="Fallback" value="Mock Jira" />
+        </Box>
+        <Box className="setup-detail-grid">
+          <DetailRow label="JIRA_BASE_URL" value="https://your-site.atlassian.net" />
+          <DetailRow label="JIRA_EMAIL" value="service account email" />
+          <DetailRow label="JIRA_API_TOKEN" value="stored outside git" />
+          <DetailRow label="JIRA_DEFAULT_JQL" value="project = KAN ORDER BY updated DESC" />
+        </Box>
+        <Alert severity="info">
+          Jira credentials should stay in ignored local environment files or your deployment secret store. In-app secret entry needs an encrypted credential store before we make it editable here.
+        </Alert>
+      </Stack>
+    </ReportPanel>
+  );
+}
+
+function LlmProxySetupPanel({ component }: { component: SetupHealthComponent }) {
+  return (
+    <ReportPanel title="LLM Proxy Setup">
+      <Stack spacing={1.5}>
+        <Typography variant="body2" color="text.secondary">{component.message}</Typography>
+        <Box className="metric-grid">
+          <MetricCard label="Proxy endpoint" value="/api/v1/proxy/openai/chat/completions" />
+          <MetricCard label="Local providers" value="Mock / Ollama" />
+          <MetricCard label="Paid provider" value="OpenAI-compatible" />
+          <MetricCard label="Secret behavior" value="Optional locally" />
+        </Box>
+        <Box className="setup-detail-grid">
+          <DetailRow label="LLM_PROVIDER" value="MOCK_LLM, OLLAMA, or OPENAI" />
+          <DetailRow label="OPENAI_CHAT_COMPLETIONS_URL" value="provider chat completions URL" />
+          <DetailRow label="OPENAI_REQUIRE_API_KEY" value="false for local mock/Ollama" />
+          <DetailRow label="OPENAI_API_KEY" value="stored outside git when required" />
+        </Box>
+        <Alert severity="info">
+          ACIP keeps usage flowing even when attribution or setup is incomplete. Provider issues should surface as visibility signals, not usage blockers.
+        </Alert>
+      </Stack>
+    </ReportPanel>
+  );
+}
+
+function SourceControlDiagnosticsPanel({ diagnostics }: { diagnostics: SourceControlDiagnosticsReport }) {
+  return (
+    <ReportPanel title="Source Control Diagnostics">
+      <Stack spacing={1.5}>
+        <Typography variant="body2" color="text.secondary">{diagnostics.message}</Typography>
+        <Box className="metric-grid">
+          <MetricCard label="Provider" value={diagnostics.provider.toUpperCase()} />
+          <MetricCard label="Configured repos" value={integer(diagnostics.configuredRepositoryCount)} />
+          <MetricCard label="Metric snapshots" value={integer(diagnostics.metricsAvailableCount)} />
+          <MetricCard label="Token present" value={diagnostics.tokenPresent ? 'Yes' : 'No'} />
+          <MetricCard label="Cache" value={diagnostics.cache.enabled ? (diagnostics.cache.populated ? 'Warm' : 'Cold') : 'Off'} />
+          <MetricCard label="Cache TTL" value={diagnostics.cache.enabled ? `${integer(diagnostics.cache.ttlSeconds)}s` : 'Unavailable'} />
+          <MetricCard label="Last loaded" value={timestamp(diagnostics.cache.lastLoadedAt)} />
+          <MetricCard label="Expires" value={timestamp(diagnostics.cache.expiresAt)} />
+        </Box>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Repository</TableCell>
+                <TableCell>Team</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">PRs</TableCell>
+                <TableCell align="right">Commits</TableCell>
+                <TableCell align="right">Merge Time</TableCell>
+                <TableCell align="right">Review Time</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {diagnostics.repositories.map((repository) => (
+                <TableRow key={`${repository.owner ?? 'mock'}-${repository.repository}`}>
+                  <TableCell>
+                    <Typography fontWeight={700}>{repository.repository}</Typography>
+                    <Typography variant="caption" color="text.secondary">{repository.owner ?? 'No owner'}</Typography>
+                  </TableCell>
+                  <TableCell>{repository.teamKey || 'Unassigned'}</TableCell>
+                  <TableCell><StatusChip value={repository.metricsAvailable ? 'READY' : 'WARNING'} /></TableCell>
+                  <TableCell align="right">{nullableCount(repository.prCount)}</TableCell>
+                  <TableCell align="right">{nullableCount(repository.commitCount)}</TableCell>
+                  <TableCell align="right">{nullableHours(repository.averageMergeTimeHours)}</TableCell>
+                  <TableCell align="right">{nullableHours(repository.averageReviewTimeHours)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {diagnostics.repositories.length === 0 && <EmptyState />}
+      </Stack>
+    </ReportPanel>
   );
 }
 
