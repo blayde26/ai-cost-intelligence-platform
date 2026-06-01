@@ -9,9 +9,14 @@ import java.util.List;
 public class OutcomeAnalyticsController {
 
     private final OutcomeAnalyticsService outcomeAnalyticsService;
+    private final ModelUtilizationService modelUtilizationService;
 
-    public OutcomeAnalyticsController(OutcomeAnalyticsService outcomeAnalyticsService) {
+    public OutcomeAnalyticsController(
+            OutcomeAnalyticsService outcomeAnalyticsService,
+            ModelUtilizationService modelUtilizationService
+    ) {
         this.outcomeAnalyticsService = outcomeAnalyticsService;
+        this.modelUtilizationService = modelUtilizationService;
     }
 
     @GetMapping("/api/v1/analytics/outcomes")
@@ -32,5 +37,15 @@ public class OutcomeAnalyticsController {
     @GetMapping("/api/v1/analytics/correlations")
     public OutcomeCorrelationReport correlations() {
         return outcomeAnalyticsService.correlations();
+    }
+
+    @GetMapping("/api/v1/analytics/model-utilization/providers")
+    public List<ProviderUtilizationSnapshot> providerUtilization() {
+        return modelUtilizationService.providerSnapshots();
+    }
+
+    @GetMapping("/api/v1/analytics/model-utilization/models")
+    public List<ModelUtilizationSnapshot> modelUtilization() {
+        return modelUtilizationService.modelSnapshots();
     }
 }

@@ -91,4 +91,44 @@ class OutcomeAnalyticsEndpointTest {
                 .andExpect(jsonPath("$.repositories").isArray())
                 .andExpect(jsonPath("$.correlations.signals").isArray());
     }
+
+    @Test
+    void modelUtilizationEndpointsReturnStableContracts() throws Exception {
+        usageEventRepository.save(new UsageEvent(
+                UUID.randomUUID(),
+                "OPENAI",
+                "gpt-4o-mini",
+                "PAY-1001",
+                "PAY-1000",
+                "payments",
+                "brian",
+                10,
+                5,
+                15,
+                new BigDecimal("1.50"),
+                20,
+                OffsetDateTime.of(2026, 5, 31, 12, 0, 0, 0, ZoneOffset.UTC),
+                "test",
+                "CAPITALIZED",
+                "SUCCEEDED",
+                AttributionStatus.VALID,
+                "e".repeat(64)
+        ));
+
+        mockMvc.perform(get("/api/v1/analytics/model-utilization/providers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].provider").value("OPENAI"))
+                .andExpect(jsonPath("$[0].totalCost").value(1.50))
+                .andExpect(jsonPath("$[0].totalTokens").value(15))
+                .andExpect(jsonPath("$[0].requestCount").value(1))
+                .andExpect(jsonPath("$[0].modelCount").value(1))
+                .andExpect(jsonPath("$[0].costPercent").value(100.0));
+
+        mockMvc.perform(get("/api/v1/analytics/model-utilization/models"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].provider").value("OPENAI"))
+                .andExpect(jsonPath("$[0].model").value("gpt-4o-mini"))
+                .andExpect(jsonPath("$[0].teamCount").value(1))
+                .andExpect(jsonPath("$[0].workTypeCount").value(1));
+    }
 }

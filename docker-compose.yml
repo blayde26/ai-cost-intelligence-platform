@@ -53,7 +53,7 @@ services:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8080
+      VITE_API_PROXY_TARGET: http://app:8080
     ports:
       - "5173:5173"
     depends_on:

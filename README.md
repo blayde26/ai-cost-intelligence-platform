@@ -70,6 +70,15 @@ Repository outcome metrics are provider-backed. Local development defaults to mo
 - Branch-name story key inference when explicit story attribution is missing
 - Attribution source visibility for explicit, inferred, manual, and missing attribution
 
+## Sprint 7 Scope
+
+- Import-first evaluation workflow
+- Usage import provider abstraction for future CSV, OpenAI, Claude Code, and Copilot imports
+- CSV import provider as the first standardized import implementation
+- Downloadable sample CSV files for minimal, OpenAI-style, and advanced imports
+- CSV import preview for validating rows before persistence
+- Model and provider utilization analytics for AI investment mix visibility
+
 ## Quick Start
 
 Start the default local stack:
@@ -224,6 +233,10 @@ If `storyKey` is missing, ACIP attempts to infer a Jira-style story key from `br
 
 Returns recent usage events, newest first. `limit` is bounded to `1..500`.
 
+`GET /api/v1/usage/events.csv?limit=100`
+
+Exports recent usage events as CSV for pilot analysis in spreadsheets.
+
 `GET /api/v1/usage/events/{id}`
 
 Returns one usage event for request detail inspection.
@@ -249,7 +262,25 @@ The response is the updated usage event with `attributionStatus` set to `MANUAL`
 
 `POST /api/v1/usage/imports/csv`
 
-Accepts raw `text/csv` and imports rows into canonical usage events. Required headers:
+Accepts raw `text/csv` and imports rows into canonical usage events.
+
+`POST /api/v1/usage/imports/{providerKey}`
+
+Imports usage through a named provider. The first supported provider is `csv`; the legacy `/csv` endpoint remains available for compatibility.
+
+`POST /api/v1/usage/imports/{providerKey}/preview`
+
+Validates usage through the same provider parser without writing usage events. The response uses the same `importedCount`, `skippedCount`, and `errors` shape, where `importedCount` means rows that are valid to import.
+
+`GET /api/v1/usage/imports/samples/minimal`
+
+`GET /api/v1/usage/imports/samples/openai`
+
+`GET /api/v1/usage/imports/samples/advanced`
+
+Downloads sample CSV files for import-first evaluation.
+
+Required headers:
 
 - `provider`
 - `model`
@@ -295,6 +326,10 @@ The import response includes `importedCount`, `skippedCount`, and row-level erro
 
 Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, source-control outcome provider, and planned outcome analytics.
 
+`GET /api/v1/setup/pilot-readiness`
+
+Returns a guided pilot readiness score, component checks, and recommended next actions based on setup health, usage volume, attribution coverage, source-control diagnostics, and Jira configuration.
+
 `GET /api/v1/source-control/diagnostics`
 
 Returns non-secret source-control diagnostics for the selected provider, including configured repository count, whether a token is present, metric snapshot count, cache state, and per-repository PR/commit/review timing metrics. Tokens are never returned by this endpoint.
@@ -311,6 +346,10 @@ The dashboard **Setup** tab uses this endpoint and includes a CSV import panel f
 
 `GET /api/v1/analytics/correlations`
 
+`GET /api/v1/analytics/model-utilization/providers`
+
+`GET /api/v1/analytics/model-utilization/models`
+
 Returns initial outcome analytics snapshots from persisted usage and work tracking data:
 
 - AI spend by team.
@@ -319,10 +358,15 @@ Returns initial outcome analytics snapshots from persisted usage and work tracki
 - Mock GitHub-style repository metrics in local mode so outcome dashboards are useful before live source-control integration.
 - Optional live GitHub repository metrics when `SOURCE_CONTROL_PROVIDER=github`, `GITHUB_TOKEN`, and `GITHUB_REPOSITORIES` are configured.
 - Correlation signals that compare AI spend with team completion rates and repository delivery metrics without claiming causation.
+- Provider and model utilization snapshots that show request count, token volume, cost, and share of total AI spend.
 
 The dashboard **Outcomes** tab displays these snapshots and correlation-oriented diagnostics.
 
 ### Jira Sync
+
+`GET /api/v1/jira/connection-test`
+
+Tests the configured Jira credentials and default JQL without syncing data. The endpoint returns non-secret setup status, whether Jira is reachable, whether issues are readable, a small issue count from the first page, and one sample issue key when available.
 
 `POST /api/v1/jira/sync`
 
@@ -344,9 +388,15 @@ Report endpoints support optional `startDate` and `endDate` query parameters. Va
 
 `GET /api/v1/reports/spend/by-story`
 
+`GET /api/v1/reports/spend/by-story.csv`
+
 `GET /api/v1/reports/spend/by-epic`
 
+`GET /api/v1/reports/spend/by-epic.csv`
+
 `GET /api/v1/reports/spend/by-team`
+
+`GET /api/v1/reports/spend/by-team.csv`
 
 `GET /api/v1/reports/allocation`
 
@@ -420,6 +470,18 @@ If Maven is not on `PATH`, use the installed Maven wrapper distribution:
 
 ```powershell
 & "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" test
+```
+
+Run a smoke test against a local running stack:
+
+```powershell
+.\scripts\smoke-test-local.ps1
+```
+
+For the Ollama-backed app on port `8081`, pass the base URL and model:
+
+```powershell
+.\scripts\smoke-test-local.ps1 -ApiBaseUrl http://localhost:8081 -Model llama3.2
 ```
 
 To run the opt-in Jira Cloud integration test, provide Jira settings from your shell or secret manager first:
