@@ -127,8 +127,16 @@ body {
 
 .import-result-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.import-results {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
 }
 
 .import-result-card {
@@ -215,6 +223,10 @@ body {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .import-result-grid {
     grid-template-columns: 1fr;
   }
 }

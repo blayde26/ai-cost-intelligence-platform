@@ -113,7 +113,7 @@ public class SetupHealthService {
     }
 
     private SetupHealthComponent outcomeAnalytics() {
-        return new SetupHealthComponent("outcomeAnalytics", "Outcome Analytics", SetupHealthStatus.NOT_CONFIGURED, "Outcome providers are planned next: Jira outcomes, GitHub outcomes, team snapshots, and correlation dashboards.");
+        return new SetupHealthComponent("outcomeAnalytics", "Outcome Analytics", SetupHealthStatus.READY, "Initial team and repository outcome snapshots are available. GitHub PR metrics are still pending a GitHub outcome provider.");
     }
 
     private SetupHealthStatus overallStatus(List<SetupHealthComponent> components) {

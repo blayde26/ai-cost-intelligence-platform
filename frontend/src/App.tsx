@@ -28,6 +28,7 @@ import {
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import GroupsIcon from '@mui/icons-material/Groups';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import InsightsIcon from '@mui/icons-material/Insights';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PieChartIcon from '@mui/icons-material/PieChart';
@@ -40,19 +41,21 @@ import {
   AttributionCorrectionRequest,
   AttributionCoverage,
   PotentialWaste,
+  RepositoryAnalyticsSnapshot,
   SetupHealthReport,
   SpendAllocation,
   SpendByEpic,
   SpendByStory,
   SpendByTeam,
   SpendOverview,
+  TeamAnalyticsSnapshot,
   UsageEvent,
   UsageImportResult,
   api
 } from './api';
 import { compactNumber, integer, money, percent, timestamp } from './format';
 
-type View = 'overview' | 'teams' | 'epics' | 'attribution' | 'waste' | 'usage' | 'setup';
+type View = 'overview' | 'teams' | 'epics' | 'attribution' | 'waste' | 'usage' | 'outcomes' | 'setup';
 
 type DashboardData = {
   overview: SpendOverview;
@@ -64,6 +67,8 @@ type DashboardData = {
   teams: SpendByTeam[];
   events: UsageEvent[];
   setupHealth: SetupHealthReport;
+  teamOutcomes: TeamAnalyticsSnapshot[];
+  repositoryOutcomes: RepositoryAnalyticsSnapshot[];
 };
 
 const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
@@ -73,6 +78,7 @@ const viewConfig: Array<{ value: View; label: string; icon: JSX.Element }> = [
   { value: 'attribution', label: 'Attribution Health', icon: <HealthAndSafetyIcon fontSize="small" /> },
   { value: 'waste', label: 'Potential Waste', icon: <WarningAmberIcon fontSize="small" /> },
   { value: 'usage', label: 'Usage Explorer', icon: <ListAltIcon fontSize="small" /> },
+  { value: 'outcomes', label: 'Outcomes', icon: <InsightsIcon fontSize="small" /> },
   { value: 'setup', label: 'Setup', icon: <SettingsIcon fontSize="small" /> }
 ];
 
@@ -124,11 +130,13 @@ export default function App() {
       .finally(() => setDetailLoading(false));
   }, [data?.events, route.eventId]);
 
-  async function loadDashboard() {
-    setLoading(true);
+  async function loadDashboard(showLoading = true) {
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth] = await Promise.all([
+      const [overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes] = await Promise.all([
         api.overview(),
         api.coverage(),
         api.allocation(),
@@ -137,13 +145,17 @@ export default function App() {
         api.spendByEpic(),
         api.spendByTeam(),
         api.usageEvents(),
-        api.setupHealth()
+        api.setupHealth(),
+        api.teamEffectiveness(),
+        api.repositoryAnalytics()
       ]);
-      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth });
+      setData({ overview, coverage, allocation, waste, stories, epics, teams, events, setupHealth, teamOutcomes, repositoryOutcomes });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unable to load dashboard data');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 
@@ -215,8 +227,11 @@ export default function App() {
                 onCorrected={(event) => void handleAttributionCorrected(event)}
               />
             )}
+            {route.view === 'outcomes' && (
+              <OutcomeAnalyticsView teams={data.teamOutcomes} repositories={data.repositoryOutcomes} />
+            )}
             {route.view === 'setup' && (
-              <SetupView health={data.setupHealth} onImported={() => void loadDashboard()} />
+              <SetupView health={data.setupHealth} onImported={() => void loadDashboard(false)} />
             )}
           </>
         )}
@@ -605,15 +620,28 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
         </Button>
         {error && <Alert severity="error">{error}</Alert>}
         {result && (
-          <Box className="import-result-grid">
-            <Paper className="import-result-card">
-              <Typography variant="body2" color="text.secondary">Imported rows</Typography>
-              <Typography className="metric-value">{integer(result.importedCount)}</Typography>
-            </Paper>
-            <Paper className="import-result-card">
-              <Typography variant="body2" color="text.secondary">Skipped rows</Typography>
-              <Typography className="metric-value">{integer(result.skippedCount)}</Typography>
-            </Paper>
+          <Box className="import-results">
+            <Stack direction="row" justifyContent="space-between" gap={2} alignItems="center">
+              <Typography variant="h3">Import Results</Typography>
+              <StatusChip value={result.skippedCount > 0 ? 'WARNING' : 'READY'} />
+            </Stack>
+            <Box className="import-result-grid">
+              <Paper className="import-result-card">
+                <Typography variant="body2" color="text.secondary">Imported rows</Typography>
+                <Typography className="metric-value">{integer(result.importedCount)}</Typography>
+              </Paper>
+              <Paper className="import-result-card">
+                <Typography variant="body2" color="text.secondary">Skipped rows</Typography>
+                <Typography className="metric-value">{integer(result.skippedCount)}</Typography>
+              </Paper>
+              <Paper className="import-result-card">
+                <Typography variant="body2" color="text.secondary">Processed rows</Typography>
+                <Typography className="metric-value">{integer(result.importedCount + result.skippedCount)}</Typography>
+              </Paper>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              Last import completed with {integer(result.importedCount)} imported and {integer(result.skippedCount)} skipped rows.
+            </Typography>
           </Box>
         )}
         {result && result.skippedCount === 0 && <Alert severity="success">CSV import completed without skipped rows.</Alert>}
@@ -629,6 +657,97 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
         )}
       </Stack>
     </Paper>
+  );
+}
+
+function OutcomeAnalyticsView({
+  teams,
+  repositories
+}: {
+  teams: TeamAnalyticsSnapshot[];
+  repositories: RepositoryAnalyticsSnapshot[];
+}) {
+  const topTeam = teams[0];
+  const topRepository = repositories[0];
+  return (
+    <Stack spacing={2.5}>
+      <Box className="metric-grid">
+        <MetricCard label="Top AI-invested team" value={topTeam?.teamKey ?? 'None'} detail={topTeam ? money(topTeam.aiSpend) : undefined} />
+        <MetricCard label="Story completion" value={topTeam ? percent(topTeam.storyCompletionRate) : percent(0)} detail={topTeam?.teamKey} />
+        <MetricCard label="Top repository" value={topRepository?.repository ?? 'None'} detail={topRepository ? money(topRepository.aiSpend) : undefined} />
+        <MetricCard label="Repository coverage" value={topRepository ? percent(topRepository.attributionCoveragePercent) : percent(0)} />
+      </Box>
+      <ReportPanel title="Team Effectiveness">
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Team</TableCell>
+                <TableCell align="right">AI Spend</TableCell>
+                <TableCell align="right">Requests</TableCell>
+                <TableCell align="right">Stories</TableCell>
+                <TableCell align="right">Completed</TableCell>
+                <TableCell align="right">Cancelled</TableCell>
+                <TableCell align="right">Operations</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {teams.map((team) => (
+                <TableRow key={team.teamKey}>
+                  <TableCell>
+                    <Typography fontWeight={700}>{team.teamKey}</Typography>
+                    <Typography variant="caption" color="text.secondary">{team.interpretation}</Typography>
+                  </TableCell>
+                  <TableCell align="right">{money(team.aiSpend)}</TableCell>
+                  <TableCell align="right">{integer(team.aiRequestCount)}</TableCell>
+                  <TableCell align="right">{integer(team.storyCount)}</TableCell>
+                  <TableCell align="right">{percent(team.storyCompletionRate)}</TableCell>
+                  <TableCell align="right">{percent(team.cancelledStoryRate)}</TableCell>
+                  <TableCell align="right">{percent(team.operationalWorkRate)}</TableCell>
+                  <TableCell><StatusChip value={team.outcomeDataStatus} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {teams.length === 0 && <EmptyState />}
+      </ReportPanel>
+      <ReportPanel title="Repository Analytics">
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Repository</TableCell>
+                <TableCell align="right">AI Spend</TableCell>
+                <TableCell align="right">Requests</TableCell>
+                <TableCell align="right">Tokens</TableCell>
+                <TableCell align="right">Coverage</TableCell>
+                <TableCell align="right">PR Count</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {repositories.map((repository) => (
+                <TableRow key={repository.repository}>
+                  <TableCell>
+                    <Typography fontWeight={700}>{repository.repository}</Typography>
+                    <Typography variant="caption" color="text.secondary">{repository.interpretation}</Typography>
+                  </TableCell>
+                  <TableCell align="right">{money(repository.aiSpend)}</TableCell>
+                  <TableCell align="right">{integer(repository.aiRequestCount)}</TableCell>
+                  <TableCell align="right">{integer(repository.totalTokens)}</TableCell>
+                  <TableCell align="right">{percent(repository.attributionCoveragePercent)}</TableCell>
+                  <TableCell align="right">{repository.prCount == null ? 'Unavailable' : integer(repository.prCount)}</TableCell>
+                  <TableCell><StatusChip value={repository.outcomeDataStatus} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {repositories.length === 0 && <EmptyState />}
+      </ReportPanel>
+    </Stack>
   );
 }
 
@@ -841,7 +960,7 @@ function CorrectionForm({
 }
 
 function StatusChip({ value }: { value: string }) {
-  const color = value === 'VALID' || value === 'READY' ? 'success' : value === 'MANUAL' ? 'info' : value === 'ERROR' ? 'error' : 'warning';
+  const color = value === 'VALID' || value === 'READY' || value === 'AVAILABLE' ? 'success' : value === 'MANUAL' || value === 'PARTIAL' ? 'info' : value === 'ERROR' ? 'error' : 'warning';
   return <Chip size="small" label={value.replace(/_/g, ' ')} color={color} variant="outlined" />;
 }
 

@@ -128,6 +128,40 @@ export type UsageImportResult = {
   errors: UsageImportError[];
 };
 
+export type TeamAnalyticsSnapshot = {
+  teamKey: string;
+  aiSpend: number;
+  aiRequestCount: number;
+  storyCount: number;
+  completedStoryCount: number;
+  cancelledStoryCount: number;
+  storyCompletionRate: number;
+  cancelledStoryRate: number;
+  capitalizedWorkRate: number;
+  operationalWorkRate: number;
+  researchWorkRate: number;
+  prCount: number | null;
+  averageMergeTimeHours: number | null;
+  averageReviewTimeHours: number | null;
+  outcomeDataStatus: string;
+  interpretation: string;
+};
+
+export type RepositoryAnalyticsSnapshot = {
+  repository: string;
+  aiSpend: number;
+  aiRequestCount: number;
+  totalTokens: number;
+  attributedEventCount: number;
+  unattributedEventCount: number;
+  attributionCoveragePercent: number;
+  prCount: number | null;
+  averageMergeTimeHours: number | null;
+  averageReviewTimeHours: number | null;
+  outcomeDataStatus: string;
+  interpretation: string;
+};
+
 export type AttributionCorrectionRequest = {
   storyKey?: string | null;
   epicKey?: string | null;
@@ -185,6 +219,8 @@ export const api = {
   spendByTeam: () => getJson<SpendByTeam[]>('/api/v1/reports/spend/by-team'),
   setupHealth: () => getJson<SetupHealthReport>('/api/v1/setup/health'),
   importUsageCsv: (csv: string) => postText<UsageImportResult>('/api/v1/usage/imports/csv', csv, 'text/csv'),
+  teamEffectiveness: () => getJson<TeamAnalyticsSnapshot[]>('/api/v1/analytics/team-effectiveness'),
+  repositoryAnalytics: () => getJson<RepositoryAnalyticsSnapshot[]>('/api/v1/analytics/repositories'),
   usageEvents: () => getJson<UsageEvent[]>('/api/v1/usage/events?limit=100'),
   usageEvent: (id: string) => getJson<UsageEvent>(`/api/v1/usage/events/${id}`),
   correctAttribution: (id: string, request: AttributionCorrectionRequest) =>

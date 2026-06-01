@@ -58,6 +58,8 @@ ACIP is expanding from AI cost attribution toward AI investment intelligence. Th
 
 Near-term work prioritizes low-friction adoption: setup health, CSV import, and import-first evaluation workflows before deeper outcome analytics.
 
+The first outcome analytics slice adds read-only team and repository snapshots. These reports are intentionally framed as correlation signals, not proof that AI caused delivery movement.
+
 ## Sprint 5 Scope
 
 - GitHub Actions CI for backend tests and frontend build
@@ -276,6 +278,23 @@ The import response includes `importedCount`, `skippedCount`, and row-level erro
 Returns readiness signals for the local database, work tracking provider, Jira configuration, LLM proxy, pricing rows, demo data, CSV imports, and planned outcome analytics.
 
 The dashboard **Setup** tab uses this endpoint and includes a CSV import panel for pilot users.
+
+### Outcome Analytics
+
+`GET /api/v1/analytics/outcomes`
+
+`GET /api/v1/analytics/team-effectiveness`
+
+`GET /api/v1/analytics/repositories`
+
+Returns initial outcome analytics snapshots from persisted usage and work tracking data:
+
+- AI spend by team.
+- Story counts, completion rate, cancellation rate, and work mix by team.
+- AI spend, token volume, and attribution coverage by repository.
+- GitHub-style PR metrics as unavailable until a GitHub outcome provider is connected.
+
+The dashboard **Outcomes** tab displays these snapshots as correlation-oriented signals.
 
 ### Jira Sync
 
