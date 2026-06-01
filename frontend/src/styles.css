@@ -125,6 +125,20 @@ body {
   padding: 12px 14px;
 }
 
+.import-result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.import-result-card {
+  border: 1px solid #e0e4ea;
+  box-shadow: none;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
 .bar-track {
   height: 8px;
   border-radius: 999px;

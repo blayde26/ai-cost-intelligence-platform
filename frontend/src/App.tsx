@@ -605,10 +605,19 @@ OLLAMA,llama3.2,payments,brian,4200,0.00033600,2026-05-31T12:00:00Z,feature/PAY-
         </Button>
         {error && <Alert severity="error">{error}</Alert>}
         {result && (
-          <Alert severity={result.skippedCount > 0 ? 'warning' : 'success'}>
-            Imported {integer(result.importedCount)} rows. Skipped {integer(result.skippedCount)} rows.
-          </Alert>
+          <Box className="import-result-grid">
+            <Paper className="import-result-card">
+              <Typography variant="body2" color="text.secondary">Imported rows</Typography>
+              <Typography className="metric-value">{integer(result.importedCount)}</Typography>
+            </Paper>
+            <Paper className="import-result-card">
+              <Typography variant="body2" color="text.secondary">Skipped rows</Typography>
+              <Typography className="metric-value">{integer(result.skippedCount)}</Typography>
+            </Paper>
+          </Box>
         )}
+        {result && result.skippedCount === 0 && <Alert severity="success">CSV import completed without skipped rows.</Alert>}
+        {result && result.skippedCount > 0 && <Alert severity="warning">CSV import completed with row-level issues.</Alert>}
         {result && result.errors.length > 0 && (
           <Stack spacing={0.75}>
             {result.errors.slice(0, 5).map((item) => (
